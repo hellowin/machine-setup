@@ -32,7 +32,8 @@ Existing shell settings are preserved, and conflicting mise configuration is not
 
 ## Customize
 
-Edit these files in your development checkout and push to GitHub:
+Edit these files on a feature branch in your development checkout, then open a
+pull request for review:
 
 | File | Purpose |
 | --- | --- |
@@ -57,8 +58,32 @@ For a release, replace `main` in the download URL with its tag and add
 `-- --ref TAG` to the command. Use `latest` in mise configuration to follow its
 latest channel, or retain ranges/pins to limit updates.
 
-CI checks Ubuntu and macOS syntax, previews, safe reruns, and config preservation
-with fake installers. Full clean-machine installation is not yet verified.
+CI checks Ubuntu and macOS syntax, previews, safe reruns, update behavior, config
+preservation, and whitespace with fake installers. Full clean-machine
+installation is not yet verified.
+
+All changes to `main` must go through a pull request. Branch protection applies
+to administrators, requires the `Required checks` status and an up-to-date branch,
+and blocks force pushes and branch deletion. Review changes in the PR before
+merging; agents must wait for an explicit instruction to merge. PRs opened with
+the owner's `gh` login are authored by the owner, so a separate approving review
+is not required (GitHub does not allow authors to approve their own PRs).
+
+```bash
+git switch -c feature/my-change
+# Edit files, then validate before committing and pushing.
+bash tests/check.sh
+git diff --check
+git add <changed-files>
+git commit -m "Describe the change"
+git push -u origin feature/my-change
+gh pr create --base main
+```
+
+After a merge, CI validates `main` again and uploads a source archive with a
+SHA-256 checksum as a GitHub Actions artifact, retained for 30 days. Download it
+from the successful workflow run. The install URL above continues to follow
+`main`; CI does not install software on a real machine or publish GitHub releases.
 
 ## Agents
 

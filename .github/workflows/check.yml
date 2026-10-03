@@ -1,16 +1,69 @@
-name: Check bootstrap
+name: CI and delivery
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   check:
+    name: Check (${{ matrix.os }})
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
       - name: Validate scripts and preview setup
-        run: bash tests/check.sh
+        run: /bin/bash tests/check.sh
+      - name: Check whitespace in committed and working changes
+        run: |
+          git diff --check HEAD^ HEAD
+          git diff --check
+
+  required:
+    name: Required checks
+    needs: check
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every platform check to succeed
+        env:
+          CHECK_RESULT: ${{ needs.check.result }}
+        run: test "$CHECK_RESULT" = success
+
+  deliver:
+    name: Package validated source
+    needs: required
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Package the checked commit
+        run: |
+          git archive --format=tar.gz --prefix=machine-setup/ --output=machine-setup.tar.gz HEAD
+          sha256sum machine-setup.tar.gz > machine-setup.tar.gz.sha256
+      - name: Upload source and checksum
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: machine-setup-${{ github.sha }}
+          path: |
+            machine-setup.tar.gz
+            machine-setup.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 30

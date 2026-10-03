@@ -8,7 +8,7 @@ case "$platform" in ubuntu|macos) ;; *) echo 'Unsupported platform.' >&2; exit 2
 if [ "$dry_run" = --dry-run ]; then
   printf 'Platform: %s\n' "$platform"
   if [ "$platform" = macos ]; then
-    printf 'Would check existing Command Line Tools and required commands (no Homebrew or sudo):\n'
+    printf 'Would require existing Command Line Tools and Homebrew, then update these formulae without sudo:\n'
   else
     printf 'Would update apt packages using sudo:\n'
   fi
@@ -39,17 +39,25 @@ if [ "$platform" = ubuntu ]; then
   sudo apt-get update
   upgrade_apt_packages "${packages[@]}"
 else
-  # Do not launch Apple's installer or Homebrew on an office-managed Mac.
+  # IT provisions Command Line Tools and Homebrew; never run their installers.
   if ! xcode-select -p >/dev/null 2>&1; then
     echo 'macOS requires existing Command Line Tools. Ask IT to provision them, then rerun; setup never installs them or uses sudo.' >&2
     exit 1
   fi
-  for package in "${packages[@]}"; do
-    if ! command -v "$package" >/dev/null 2>&1; then
-      printf 'Missing macOS prerequisite: %s. Ask IT to provision it; setup does not install system packages.\n' "$package" >&2
-      exit 1
+  # Homebrew's standard paths cover Apple Silicon and Intel Macs.
+  if ! command -v brew >/dev/null 2>&1; then
+    if [ -x /opt/homebrew/bin/brew ]; then
+      eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [ -x /usr/local/bin/brew ]; then
+      eval "$(/usr/local/bin/brew shellenv)"
     fi
-  done
+  fi
+  if ! command -v brew >/dev/null 2>&1; then
+    echo 'Warning: Homebrew is not installed or available. Install Homebrew manually through Corporate IT/managed software center, then rerun setup. Setup never installs Homebrew or uses sudo on macOS.' >&2
+    exit 1
+  fi
+  brew update
+  upgrade_brew_packages "${packages[@]}"
 fi
 
 # A user-local symlink could still target an IT-managed binary.

@@ -40,8 +40,16 @@ cat > "$scratch/bin/sudo" <<'MOCK'
 MOCK
 cat > "$scratch/bin/brew" <<'MOCK'
 #!/usr/bin/env bash
-echo 'Unexpected Homebrew invocation.' >&2
-exit 1
+case "${1:-}" in
+  info) printf '{"formulae":[{"installed":[],"versions":{"stable":"1.0"}}]}\n' ;;
+  update|install|upgrade) exit 0 ;;
+  *) exit 1 ;;
+esac
+MOCK
+cat > "$scratch/bin/ruby" <<'MOCK'
+#!/usr/bin/env bash
+cat >/dev/null
+printf 'install\n'
 MOCK
 cat > "$scratch/bin/apt-mark" <<'MOCK'
 #!/usr/bin/env bash

@@ -1,4 +1,3 @@
-# Required existing commands; setup checks these without installing or upgrading.
-# IT must provision Command Line Tools. Homebrew is never invoked.
+# One Homebrew formula per line. IT must provision Homebrew and Command Line Tools.
 git
 curl

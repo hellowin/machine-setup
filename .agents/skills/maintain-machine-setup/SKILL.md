@@ -42,6 +42,14 @@ updates using native apt comparison and Homebrew metadata; `brew-action.rb`
 compares Homebrew formula versions and revisions. Package lists live in
 `config/packages.*.txt`. `scripts/verify.sh` checks the resulting base tools.
 
+## Pull request workflow
+
+Develop changes on a feature branch and open a pull request with `gh` for the
+user to review. Never push directly to the default branch, bypass its protection,
+or merge a pull request without the user's explicit instruction to merge.
+Keep unrelated working-tree changes out of the commit. Run the required checks
+before pushing and include their results in the pull request description.
+
 ## Validate changes
 
 Run `bash tests/check.sh` and `git diff --check`. Add regression coverage for

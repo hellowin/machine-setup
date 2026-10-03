@@ -68,41 +68,83 @@ class UpdateTests(unittest.TestCase):
         result = self.run_packages("upgrade_apt_packages", ["broken"])
         self.assertNotEqual(result.returncode, 0)
 
-    @unittest.skipUnless(shutil.which("ruby"), "Homebrew version decisions run on macOS with Ruby")
-    def test_brew_versions_revisions_and_pins(self):
-        for installed, stable, revision, pinned, expected in [
-            ([], "2.0", 0, False, "install"),
-            (["1.9"], "2.0", 0, False, "upgrade"),
-            (["2.0"], "2.0", 0, False, "keep"),
-            (["3.0"], "2.0", 0, False, "keep"),
-            (["1.0", "3.0"], "2.0", 0, False, "keep"),
-            (["2.0_1"], "2.0", 2, False, "upgrade"),
-            (["2.0_3"], "2.0", 2, False, "keep"),
-            (["1.0"], "2.0", 0, True, "keep"),
-            (["HEAD-abc"], "2.0", 0, False, "keep"),
-        ]:
-            with self.subTest(installed=installed, revision=revision, pinned=pinned):
-                formula = {"versions": {"stable": stable}, "revision": revision,
-                           "installed": [{"version": v} for v in installed], "pinned": pinned}
-                result = subprocess.run(["ruby", str(ROOT / "scripts/brew-action.rb")],
-                                        input=json.dumps({"formulae": [formula]}),
-                                        capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stdout.strip(), expected)
+    def macos_mocks(self):
+        home = self.base / "home"
+        home.mkdir()
+        self.env["XDG_CONFIG_HOME"] = str(home / ".config")
+        for name in ("sudo", "brew", "git"):
+            self.mock(name, "import sys\nprint('Unexpected privileged/system mutation', file=sys.stderr)\nsys.exit(97)\n")
+        self.mock("xcode-select", "import sys\nsys.exit(0 if sys.argv[1:]==['-p'] else 98)\n")
+        self.mock("mise", "import sys\nprint('Unexpected system mise invocation', file=sys.stderr)\nsys.exit(99)\n")
+        self.mock("curl", "import sys\nsys.exit(96)\n")
+        return home
 
-    def test_brew_only_mutates_selected_formulae(self):
-        # Test orchestration independently of the native Ruby version decision.
-        self.mock("ruby", "import sys\nprint(sys.stdin.read().strip())\n")
-        self.mock("brew", """import os,sys,json
-args=sys.argv[1:]
-if args[0]=='info':
-    print({'missing':'install','older':'upgrade','equal':'keep','newer':'keep','pinned':'keep'}[args[-1]])
-else:
-    with open(os.environ['MOCK_LOG'],'a') as f: f.write(json.dumps(args)+'\\n')
+    def run_macos(self):
+        return subprocess.run(["bash", str(ROOT / "scripts/setup.sh"), "macos"],
+                              env=self.env, capture_output=True, text=True)
+
+    def test_macos_missing_clt_stops_without_installers_or_writes(self):
+        home = self.macos_mocks()
+        self.mock("xcode-select", "import sys\nsys.exit(1)\n")
+        result = self.run_macos()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Ask IT", result.stderr)
+        self.assertEqual(list(home.iterdir()), [])
+        # The downloaded bootstrap must also stop before invoking Git/CLT install.
+        self.mock("uname", "print('Darwin')\n")
+        result = subprocess.run(["bash", "-c", (ROOT / "bootstrap.sh").read_text()],
+                                env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Ask IT", result.stderr)
+        self.assertEqual(list(home.iterdir()), [])
+
+    def test_macos_missing_command_stops_before_mise(self):
+        home = self.macos_mocks()
+        # Isolate a checkout to exercise an unavailable manifest command on any host.
+        checkout = self.base / "checkout"
+        shutil.copytree(ROOT / "scripts", checkout / "scripts")
+        (checkout / "config").mkdir()
+        (checkout / "config/packages.macos.txt").write_text("machine-setup-unavailable-command\n")
+        result = subprocess.run(["bash", str(checkout / "scripts/setup.sh"), "macos"],
+                                env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Missing macOS prerequisite", result.stderr)
+        self.assertEqual(list(home.iterdir()), [])
+
+    def test_macos_rejects_local_mise_symlink_to_system_binary(self):
+        home = self.macos_mocks()
+        (home / ".local/bin").mkdir(parents=True)
+        (home / ".local/bin/mise").symlink_to(self.bin / "mise")
+        result = self.run_macos()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("writable user-local mise", result.stderr)
+        self.assertFalse((home / ".config").exists())
+
+    def test_macos_installs_local_mise_ignoring_system_binary_and_destination(self):
+        home = self.macos_mocks()
+        self.env["MISE_INSTALL_PATH"] = str(self.base / "must-not-write")
+        # Fake the downloaded installer, not the host's package managers.
+        installer = self.base / "installer.sh"
+        installer.write_text("""#!/bin/sh
+set -eu
+[ "$MISE_INSTALL_PATH" = "$HOME/.local/bin/mise" ]
+mkdir -p "$HOME/.local/bin"
+cat > "$MISE_INSTALL_PATH" <<'MOCK'
+#!/bin/sh
+case "$1" in self-update|trust|install|upgrade|--version|ls) exit 0 ;; *) exit 1 ;; esac
+MOCK
+chmod +x "$MISE_INSTALL_PATH"
 """)
-        result = self.run_packages("upgrade_brew_packages", ["missing", "older", "equal", "newer", "pinned"])
+        self.mock("curl", f"import sys,shutil\nshutil.copyfile({str(installer)!r}, sys.argv[sys.argv.index('-o')+1])\n")
+        result = self.run_macos()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.calls(), [["install", "--formula", "missing"], ["upgrade", "--formula", "older"]])
+        self.assertTrue((home / ".local/bin/mise").is_file())
+        self.assertFalse((self.base / "must-not-write").exists())
+        self.assertIn(str(home / ".local/bin/mise"), (home / ".zshrc").read_text())
+        # A rerun must use local mise without downloading or touching the system copy.
+        self.mock("curl", "import sys\nsys.exit(96)\n")
+        result = self.run_macos()
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_setup_uses_native_mise_updates_and_preserves_manifest(self):
         home = self.base / "home"

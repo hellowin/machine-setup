@@ -24,17 +24,3 @@ upgrade_apt_packages() {
     fi
   done
 }
-
-upgrade_brew_packages() {
-  local package info action
-  for package in "$@"; do
-    info=$(HOMEBREW_NO_AUTO_UPDATE=1 brew info --json=v2 --formula "$package")
-    action=$(printf '%s\n' "$info" | ruby "$setup_dir/scripts/brew-action.rb")
-    case "$action" in
-      install) HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install --formula "$package" ;;
-      upgrade) HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew upgrade --formula "$package" ;;
-      keep) printf 'Keep current, newer, or pinned Homebrew formula: %s\n' "$package" ;;
-      *) echo 'Unexpected Homebrew package decision.' >&2; return 1 ;;
-    esac
-  done
-}

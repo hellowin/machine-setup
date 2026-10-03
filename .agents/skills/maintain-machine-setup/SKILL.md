@@ -12,9 +12,21 @@ permission to install software on the operator's machine or publish changes.
 ## Contract
 
 - Keep the public README install command working on fresh Ubuntu 24.04+,
-  WSL Ubuntu, and macOS. Use Bash 3.2-compatible shell features for macOS.
-- Reruns converge to available updates for declared packages. Do not downgrade
-  a newer OS package, reinstall an equal version, ignore package-manager pins,
+  WSL Ubuntu, and macOS with IT-provisioned Command Line Tools. Use Bash
+  3.2-compatible shell features for macOS.
+- **macOS is office-managed and has no sudo.** Never invoke sudo, launch
+  Command Line Tools installation, run Homebrew (including its installer), or
+  update system/IT-managed binaries on macOS. Check existing commands listed in
+  `config/packages.macos.txt` and fail with an IT prerequisite message if absent.
+  Install and self-update mise at `~/.local/bin/mise` even when a system mise is
+  on PATH; explicitly set the installer destination and reject a linked or
+  non-writable local mise binary. Keep tools and activation
+  in user-writable locations. New tools/backends must be checked for indirect
+  privilege requirements before adding them to the macOS setup.
+- **Ubuntu/WSL is personally managed with sudo available.** Keep sudo for apt
+  metadata refreshes and guarded package installs/upgrades.
+- Reruns converge to available updates for declared Ubuntu packages. Do not
+  downgrade a newer OS package, reinstall an equal version, ignore package-manager pins,
   remove existing OS packages, or run a blanket OS upgrade.
 - **Let mise handle its own versions.** Use native install, upgrade, and
   self-update commands or its owning package manager. Keep requests in
@@ -37,10 +49,10 @@ permission to install software on the operator's machine or publish changes.
 ## Where to work
 
 `bootstrap.sh` locates or fetches the checkout. `scripts/setup.sh` orchestrates
-platform packages, mise, and activation. `scripts/packages.sh` guards package
-updates using native apt comparison and Homebrew metadata; `brew-action.rb`
-compares Homebrew formula versions and revisions. Package lists live in
-`config/packages.*.txt`. `scripts/verify.sh` checks the resulting base tools.
+Ubuntu packages, macOS prerequisites, mise, and activation. `scripts/packages.sh`
+guards Ubuntu updates using native apt comparison. Manifests live in
+`config/packages.*.txt`; the macOS manifest lists required existing commands,
+not packages to install. `scripts/verify.sh` checks the resulting base tools.
 
 ## Pull request workflow
 
@@ -53,10 +65,11 @@ before pushing and include their results in the pull request description.
 ## Validate changes
 
 Run `bash tests/check.sh` and `git diff --check`. Add regression coverage for
-missing, older, equal, newer, held/pinned versions and meaningful failure cases
+missing, older, equal, newer, held versions and meaningful failure cases
 when changing updates. Use fake installers, isolated homes, and temporary
-checkouts; do not run real apt, Homebrew, or mise upgrades to test code unless
-the user requests applying setup. The GitHub Actions matrix checks Ubuntu and
+checkouts. Cover macOS with failing sudo/Homebrew/CLT installer mocks, missing
+prerequisites, and a system mise on PATH. Do not run real apt or mise upgrades
+to test code unless the user requests applying setup. The GitHub Actions matrix checks Ubuntu and
 macOS; report any platform not actually exercised.
 
 Keep README installation and update instructions concise and accurate. Keep

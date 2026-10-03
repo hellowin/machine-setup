@@ -1,3 +1,4 @@
-# One Homebrew formula per line. Command Line Tools provide the compiler.
+# Required existing commands; setup checks these without installing or upgrading.
+# IT must provision Command Line Tools. Homebrew is never invoked.
 git
 curl

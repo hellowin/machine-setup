@@ -10,9 +10,10 @@ Run in your Ubuntu or Mac terminal:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/hellowin/machine-setup/main/bootstrap.sh)"
 ```
 
-Run as your normal user. Enter your password when asked, then open a new terminal.
-On a fresh Mac, finish Apple's Command Line Tools installation if prompted and
-rerun the command. Homebrew may also ask for confirmation.
+Run as your normal user, then open a new terminal. Ubuntu/WSL asks for your sudo
+password for apt operations. macOS never uses sudo or Homebrew: office IT must
+provide Command Line Tools and the required Git/curl commands beforehand.
+Setup stops with a prerequisite message if they are missing.
 If Ubuntu has no curl, install it first: `sudo apt-get update && sudo apt-get install -y curl`.
 
 ## What's included
@@ -23,9 +24,11 @@ If Ubuntu has no curl, install it first: `sudo apt-get update && sudo apt-get in
 
 The checkout lives in `~/.local/share/machine-setup`. Rerun the install command to
 update and reapply setup; existing checkout changes must be committed or stashed.
-Declared apt/Homebrew packages upgrade when newer versions are available; equal,
-newer, held, and pinned installations are preserved. No blanket OS upgrade runs.
-Mise uses native `self-update`, `install`, and `upgrade` behavior. Ranges such as
+Declared Ubuntu apt packages upgrade when newer versions are available; equal,
+newer, and held installations are preserved. macOS only checks existing commands;
+IT remains responsible for their installation and updates. No blanket OS upgrade runs.
+macOS installs mise at `~/.local/bin/mise` and leaves any system/Homebrew mise
+untouched. Mise uses native `self-update`, `install`, and `upgrade` behavior. Ranges such as
 Node `26` track 26.x; exact pins stay pinned. Mise decides which runtime is active
 and how old versions are pruned; there is no custom mise version override.
 Existing shell settings are preserved, and conflicting mise configuration is not overwritten.
@@ -39,7 +42,7 @@ pull request for review:
 | --- | --- |
 | `config/tools.toml` | Enable mise tools and choose versions |
 | `config/packages.ubuntu.txt` | Ubuntu/WSL apt packages |
-| `config/packages.macos.txt` | macOS Homebrew packages |
+| `config/packages.macos.txt` | macOS commands IT must provide |
 | `scripts/setup.sh` | Additional setup steps |
 
 Keep tokens and private keys outside this public repository. Credentials and

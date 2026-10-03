@@ -19,7 +19,7 @@ If Ubuntu has no curl, install it first: `sudo apt-get update && sudo apt-get in
 
 - Git, curl, and Ubuntu build prerequisites.
 - mise installation and activation in Bash and Zsh.
-- Optional development tools from `config/tools.toml` (initially disabled).
+- Node 26 and Python 3.14, configured in `config/tools.toml`.
 
 The checkout lives in `~/.local/share/machine-setup`. Rerun the install command to
 update and reapply setup; existing checkout changes must be committed or stashed.

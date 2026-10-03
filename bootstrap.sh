@@ -59,8 +59,12 @@ if [ -n "$repo" ]; then
   fi
   # The remote entrypoint has no other repository files available yet.
   if [ "$platform" = ubuntu ]; then
-    sudo apt-get update
-    sudo apt-get install -y git curl ca-certificates
+    # Only acquire Git if missing; package upgrades happen after fetching setup.
+    # Do not reinstall or downgrade an existing prerequisite to obtain the repo.
+    if ! command -v git >/dev/null 2>&1; then
+      sudo apt-get update
+      sudo apt-get install -y --no-remove git
+    fi
   else
     if ! xcode-select -p >/dev/null 2>&1; then
       xcode-select --install

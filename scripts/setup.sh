@@ -8,7 +8,7 @@ case "$platform" in ubuntu|macos) ;; *) echo 'Unsupported platform.' >&2; exit 2
 if [ "$dry_run" = --dry-run ]; then
   printf 'Platform: %s\nPackage list:\n' "$platform"
   cat "$setup_dir/config/packages.$platform.txt"
-  printf '\nWould install mise, link config/tools.toml into ~/.config/mise/conf.d,\ninstall configured tools, and add mise activation to .bashrc and .zshrc.\n'
+  printf '\nWould install mise, link config/tools.toml into ~/.config/mise/conf.d,\nupgrade configured tools using mise, and add mise activation to .bashrc and .zshrc.\n'
   exit 0
 fi
 
@@ -22,6 +22,8 @@ if [ -e "$config_target" ] || [ -L "$config_target" ]; then
   fi
 fi
 
+. "$setup_dir/scripts/packages.sh"
+
 packages=()
 while IFS= read -r package || [ -n "$package" ]; do
   case "$package" in ''|\#*) continue ;; esac
@@ -30,7 +32,7 @@ done < "$setup_dir/config/packages.$platform.txt"
 
 if [ "$platform" = ubuntu ]; then
   sudo apt-get update
-  sudo apt-get install -y "${packages[@]}"
+  upgrade_apt_packages "${packages[@]}"
 else
   if ! xcode-select -p >/dev/null 2>&1; then
     xcode-select --install
@@ -56,7 +58,8 @@ else
       eval "$(/usr/local/bin/brew shellenv)"
     fi
   fi
-  brew install "${packages[@]}"
+  brew update
+  upgrade_brew_packages "${packages[@]}"
 fi
 
 if [ -x "$HOME/.local/bin/mise" ]; then
@@ -70,6 +73,22 @@ else
   rm -f "$installer"
   mise_bin=$HOME/.local/bin/mise
 fi
+# Update mise through its owner; standalone binaries use native self-update.
+case "$mise_bin" in
+  /opt/homebrew/*|/usr/local/Cellar/*|/usr/local/bin/mise)
+    if [ "$platform" = macos ] && brew list --formula mise >/dev/null 2>&1; then
+      upgrade_brew_packages mise
+    else
+      "$mise_bin" self-update --yes
+    fi ;;
+  /usr/bin/mise)
+    if [ "$platform" = ubuntu ] && dpkg-query -S "$mise_bin" >/dev/null 2>&1; then
+      upgrade_apt_packages mise
+    else
+      "$mise_bin" self-update --yes
+    fi ;;
+  *) "$mise_bin" self-update --yes ;;
+esac
 mkdir -p "$config_dir"
 if [ ! -L "$config_target" ]; then
   ln -s "$setup_dir/config/tools.toml" "$config_target"
@@ -78,7 +97,10 @@ cd "$setup_dir"
 # Explicit trust is limited to this setup repository.
 "$mise_bin" trust "$setup_dir/mise.toml"
 "$mise_bin" trust "$setup_dir/config/tools.toml"
+# Native mise semantics: install missing versions, then upgrade within requests.
+# Do not compare versions ourselves, bump requests, or force reinstalls.
 "$mise_bin" install
+"$mise_bin" upgrade
 
 # Quote the executable path for Bash/Zsh; this also handles paths with spaces.
 printf -v quoted_mise '%q' "$mise_bin"

@@ -23,6 +23,11 @@ If Ubuntu has no curl, install it first: `sudo apt-get update && sudo apt-get in
 
 The checkout lives in `~/.local/share/machine-setup`. Rerun the install command to
 update and reapply setup; existing checkout changes must be committed or stashed.
+Declared apt/Homebrew packages upgrade when newer versions are available; equal,
+newer, held, and pinned installations are preserved. No blanket OS upgrade runs.
+Mise uses native `self-update`, `install`, and `upgrade` behavior. Ranges such as
+Node `26` track 26.x; exact pins stay pinned. Mise decides which runtime is active
+and how old versions are pruned; there is no custom mise version override.
 Existing shell settings are preserved, and conflicting mise configuration is not overwritten.
 
 ## Customize
@@ -49,8 +54,17 @@ bash tests/check.sh         # Run checks without installing packages
 
 To preview on a new machine, add `-- --dry-run` to the install command.
 For a release, replace `main` in the download URL with its tag and add
-`-- --ref TAG` to the command. Use exact tool versions for reproducibility;
-OS packages and the mise installer use available versions.
+`-- --ref TAG` to the command. Use `latest` in mise configuration to follow its
+latest channel, or retain ranges/pins to limit updates.
 
 CI checks Ubuntu and macOS syntax, previews, safe reruns, and config preservation
 with fake installers. Full clean-machine installation is not yet verified.
+
+## Agents
+
+Read `AGENTS.md` and the shared skill at
+`.agents/skills/maintain-machine-setup/SKILL.md` before working on this repository.
+Codex uses `AGENTS.md`, Claude uses `CLAUDE.md`, and Copilot uses
+`.github/copilot-instructions.md`. All route to the same agent-neutral contract;
+Claude and Copilot also have skill discovery links. Automatic loading depends
+on the agent client and its instruction settings.

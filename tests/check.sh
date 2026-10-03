@@ -39,7 +39,23 @@ cat > "$scratch/bin/sudo" <<'MOCK'
 MOCK
 cat > "$scratch/bin/brew" <<'MOCK'
 #!/usr/bin/env bash
+case "${1:-}" in
+  info) printf '{"formulae":[{"installed":[],"versions":{"stable":"1.0"}}]}\n' ;;
+  *) exit 0 ;;
+esac
+MOCK
+cat > "$scratch/bin/ruby" <<'MOCK'
+#!/usr/bin/env bash
+cat >/dev/null
+printf 'install\n'
+MOCK
+cat > "$scratch/bin/apt-mark" <<'MOCK'
+#!/usr/bin/env bash
 exit 0
+MOCK
+cat > "$scratch/bin/apt-cache" <<'MOCK'
+#!/usr/bin/env bash
+printf 'Installed: (none)\nCandidate: 1.0\n'
 MOCK
 cat > "$scratch/bin/xcode-select" <<'MOCK'
 #!/usr/bin/env bash
@@ -56,7 +72,7 @@ for platform in ubuntu macos; do
   mkdir -p "$test_home/.local/bin"
   cat > "$test_home/.local/bin/mise" <<'MOCK'
 #!/usr/bin/env bash
-case "${1:-}" in trust|install|--version|ls) exit 0 ;; *) exit 1 ;; esac
+case "${1:-}" in trust|install|upgrade|self-update|--version|ls) exit 0 ;; *) exit 1 ;; esac
 MOCK
   chmod +x "$test_home/.local/bin/mise"
   printf '# Existing shell configuration\n' > "$test_home/.bashrc"
@@ -77,3 +93,5 @@ MOCK
   grep -qx 'existing config' "$test_home/.config/mise/conf.d/machine-setup.toml"
 done
 printf 'Syntax, previews, repeated setup, and configuration preservation checks passed.\n'
+
+python3 tests/test_updates.py

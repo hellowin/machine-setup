@@ -1,0 +1,6 @@
+# One apt package per line. WSL uses the same list as native Ubuntu.
+ca-certificates
+curl
+git
+unzip
+build-essential

@@ -1,0 +1,15 @@
+[tasks.setup]
+description = "Apply the machine setup (may request sudo)"
+run = "bash bootstrap.sh"
+
+[tasks.plan]
+description = "Preview setup without modifying the machine"
+run = "bash bootstrap.sh --dry-run"
+
+[tasks.verify]
+description = "Check the installed base tools"
+run = "bash scripts/verify.sh"
+
+[tasks.check]
+description = "Check shell syntax and bootstrap behavior without installing packages"
+run = "bash tests/check.sh"

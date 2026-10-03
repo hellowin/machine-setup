@@ -1,0 +1,6 @@
+# This file is linked to ~/.config/mise/conf.d/machine-setup.toml.
+# Uncomment only the tools you want on every machine.
+# Use exact versions when you need reproducibility.
+[tools]
+node = "26"
+python = "3.14"

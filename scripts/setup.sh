@@ -6,7 +6,12 @@ dry_run=${2:-}
 case "$platform" in ubuntu|macos) ;; *) echo 'Unsupported platform.' >&2; exit 2 ;; esac
 
 if [ "$dry_run" = --dry-run ]; then
-  printf 'Platform: %s\nPackage list:\n' "$platform"
+  printf 'Platform: %s\n' "$platform"
+  if [ "$platform" = macos ]; then
+    printf 'Would require existing Command Line Tools and Homebrew, then update these formulae without sudo:\n'
+  else
+    printf 'Would update apt packages using sudo:\n'
+  fi
   cat "$setup_dir/config/packages.$platform.txt"
   printf '\nWould install mise, link config/tools.toml into ~/.config/mise/conf.d,\nupgrade configured tools using mise, and add mise activation to .bashrc and .zshrc.\n'
   exit 0
@@ -34,9 +39,9 @@ if [ "$platform" = ubuntu ]; then
   sudo apt-get update
   upgrade_apt_packages "${packages[@]}"
 else
+  # IT provisions Command Line Tools and Homebrew; never run their installers.
   if ! xcode-select -p >/dev/null 2>&1; then
-    xcode-select --install
-    echo 'Finish installing Command Line Tools, then rerun setup.' >&2
+    echo 'macOS requires existing Command Line Tools. Ask IT to provision them, then rerun; setup never installs them or uses sudo.' >&2
     exit 1
   fi
   # Homebrew's standard paths cover Apple Silicon and Intel Macs.
@@ -48,39 +53,36 @@ else
     fi
   fi
   if ! command -v brew >/dev/null 2>&1; then
-    installer=$(mktemp)
-    curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o "$installer"
-    /bin/bash "$installer"
-    rm -f "$installer"
-    if [ -x /opt/homebrew/bin/brew ]; then
-      eval "$(/opt/homebrew/bin/brew shellenv)"
-    else
-      eval "$(/usr/local/bin/brew shellenv)"
-    fi
+    echo 'Warning: Homebrew is not installed or available. Install Homebrew manually through Corporate IT/managed software center, then rerun setup. Setup never installs Homebrew or uses sudo on macOS.' >&2
+    exit 1
   fi
   brew update
   upgrade_brew_packages "${packages[@]}"
 fi
 
+# A user-local symlink could still target an IT-managed binary.
+if [ "$platform" = macos ]; then
+  local_mise=$HOME/.local/bin/mise
+  if [ -L "$local_mise" ] || { [ -e "$local_mise" ] && { [ ! -w "$local_mise" ] || [ ! -w "$HOME/.local/bin" ]; }; }; then
+    printf 'Move linked or non-writable %s aside; macOS requires a writable user-local mise binary.\n' "$local_mise" >&2
+    exit 1
+  fi
+fi
+
 if [ -x "$HOME/.local/bin/mise" ]; then
   mise_bin=$HOME/.local/bin/mise
-elif command -v mise >/dev/null 2>&1; then
+elif [ "$platform" = ubuntu ] && command -v mise >/dev/null 2>&1; then
   mise_bin=$(command -v mise)
 else
   installer=$(mktemp)
   curl -fsSL https://mise.run -o "$installer"
-  sh "$installer"
+  MISE_INSTALL_PATH="$HOME/.local/bin/mise" sh "$installer"
   rm -f "$installer"
   mise_bin=$HOME/.local/bin/mise
 fi
-# Update mise through its owner; standalone binaries use native self-update.
+# macOS always uses the user-local binary, leaving IT-managed mise untouched.
+# Ubuntu updates mise through its owner; standalone binaries use self-update.
 case "$mise_bin" in
-  /opt/homebrew/*|/usr/local/Cellar/*|/usr/local/bin/mise)
-    if [ "$platform" = macos ] && brew list --formula mise >/dev/null 2>&1; then
-      upgrade_brew_packages mise
-    else
-      "$mise_bin" self-update --yes
-    fi ;;
   /usr/bin/mise)
     if [ "$platform" = ubuntu ] && dpkg-query -S "$mise_bin" >/dev/null 2>&1; then
       upgrade_apt_packages mise

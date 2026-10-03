@@ -35,13 +35,15 @@ done
 mkdir -p "$scratch/bin"
 cat > "$scratch/bin/sudo" <<'MOCK'
 #!/usr/bin/env bash
+[ "${MOCK_PLATFORM:-}" = ubuntu ] || { echo "Unexpected sudo on macOS." >&2; exit 1; }
 [ "${1:-}" = apt-get ] || exit 1
 MOCK
 cat > "$scratch/bin/brew" <<'MOCK'
 #!/usr/bin/env bash
 case "${1:-}" in
   info) printf '{"formulae":[{"installed":[],"versions":{"stable":"1.0"}}]}\n' ;;
-  *) exit 0 ;;
+  update|install|upgrade) exit 0 ;;
+  *) exit 1 ;;
 esac
 MOCK
 cat > "$scratch/bin/ruby" <<'MOCK'
@@ -59,7 +61,7 @@ printf 'Installed: (none)\nCandidate: 1.0\n'
 MOCK
 cat > "$scratch/bin/xcode-select" <<'MOCK'
 #!/usr/bin/env bash
-exit 0
+[ "${1:-}" = -p ] || { echo "Unexpected CLT installer invocation." >&2; exit 1; }
 MOCK
 cat > "$scratch/bin/curl" <<'MOCK'
 #!/usr/bin/env bash
@@ -77,7 +79,7 @@ MOCK
   chmod +x "$test_home/.local/bin/mise"
   printf '# Existing shell configuration\n' > "$test_home/.bashrc"
   for iteration in 1 2; do
-    HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" PATH="$scratch/bin:$PATH" \
+    MOCK_PLATFORM="$platform" HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" PATH="$scratch/bin:$PATH" \
       bash scripts/setup.sh "$platform" > "$scratch/$platform-apply"
   done
   [ "$(grep -c 'activate bash' "$test_home/.bashrc")" -eq 1 ]
@@ -86,7 +88,7 @@ MOCK
   [ -L "$test_home/.config/mise/conf.d/machine-setup.toml" ]
   rm "$test_home/.config/mise/conf.d/machine-setup.toml"
   printf 'existing config\n' > "$test_home/.config/mise/conf.d/machine-setup.toml"
-  if HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" PATH="$scratch/bin:$PATH" \
+  if MOCK_PLATFORM="$platform" HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" PATH="$scratch/bin:$PATH" \
     bash scripts/setup.sh "$platform" > /dev/null 2>&1; then
     echo 'Conflicting config unexpectedly overwritten.' >&2; exit 1
   fi

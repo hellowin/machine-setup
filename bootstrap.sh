@@ -54,7 +54,7 @@ if [ -n "$repo" ]; then
   case "$repo" in https://*) ;; *) echo '--repo must be an HTTPS Git URL.' >&2; exit 2 ;; esac
   setup_dir=${MACHINE_SETUP_DIR:-"$HOME/.local/share/machine-setup"}
   if "$dry_run"; then
-    printf 'Would prepare %s packages, clone/update %s at %s into %s, then apply setup.\n' "$platform" "$repo" "$ref" "$setup_dir"
+    printf 'Would check %s prerequisites, clone/update %s at %s into %s, then apply setup.\n' "$platform" "$repo" "$ref" "$setup_dir"
     exit 0
   fi
   # The remote entrypoint has no other repository files available yet.
@@ -67,8 +67,7 @@ if [ -n "$repo" ]; then
     fi
   else
     if ! xcode-select -p >/dev/null 2>&1; then
-      xcode-select --install
-      echo 'Finish installing Command Line Tools, then rerun this command.' >&2
+      echo 'macOS requires existing Command Line Tools. Ask IT to provision them, then rerun; setup never installs them or uses sudo.' >&2
       exit 1
     fi
   fi

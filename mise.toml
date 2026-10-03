@@ -1,5 +1,5 @@
 [tasks.setup]
-description = "Apply the machine setup (may request sudo)"
+description = "Apply the machine setup (Ubuntu uses sudo; macOS runs as your user)"
 run = "bash bootstrap.sh"
 
 [tasks.plan]

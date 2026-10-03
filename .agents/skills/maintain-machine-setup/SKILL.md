@@ -12,10 +12,26 @@ permission to install software on the operator's machine or publish changes.
 ## Contract
 
 - Keep the public README install command working on fresh Ubuntu 24.04+,
-  WSL Ubuntu, and macOS. Use Bash 3.2-compatible shell features for macOS.
-- Reruns converge to available updates for declared packages. Do not downgrade
-  a newer OS package, reinstall an equal version, ignore package-manager pins,
-  remove existing OS packages, or run a blanket OS upgrade.
+  WSL Ubuntu, and macOS with IT-provisioned Command Line Tools. Use Bash
+  3.2-compatible shell features for macOS.
+- **macOS is office-managed and has no sudo.** Never invoke sudo or launch
+  Command Line Tools or Homebrew installation. Corporate IT provisions them,
+  including Homebrew through the managed software center. Discover existing
+  Homebrew on PATH or at its standard Apple Silicon/Intel prefixes. If missing,
+  warn the user to install Homebrew manually through IT and stop before package
+  updates or configuration writes. With properly provisioned Homebrew, use
+  unprivileged `brew update` and guarded formula installs/upgrades from
+  `config/packages.macos.txt`; do not repair permissions or escalate privileges.
+  Install and self-update mise at `~/.local/bin/mise` even when a system mise is
+  on PATH; explicitly set the installer destination and reject a linked or
+  non-writable local mise binary. Keep tools and activation in user-writable
+  locations. New formulae/tools/backends must be checked for indirect privilege
+  requirements before adding them to the macOS setup.
+- **Ubuntu/WSL is personally managed with sudo available.** Keep sudo for apt
+  metadata refreshes and guarded package installs/upgrades.
+- Reruns converge to available updates for declared apt/Homebrew packages. Do not
+  downgrade a newer OS package, reinstall an equal version, ignore package-manager
+  pins, remove existing OS packages, or run a blanket OS upgrade.
 - **Let mise handle its own versions.** Use native install, upgrade, and
   self-update commands or its owning package manager. Keep requests in
   `config/tools.toml`; do not implement custom mise version comparisons, rewrite
@@ -55,9 +71,11 @@ before pushing and include their results in the pull request description.
 Run `bash tests/check.sh` and `git diff --check`. Add regression coverage for
 missing, older, equal, newer, held/pinned versions and meaningful failure cases
 when changing updates. Use fake installers, isolated homes, and temporary
-checkouts; do not run real apt, Homebrew, or mise upgrades to test code unless
-the user requests applying setup. The GitHub Actions matrix checks Ubuntu and
-macOS; report any platform not actually exercised.
+checkouts. Cover macOS with failing sudo/CLT installer mocks, missing Homebrew
+and Command Line Tools, successful brew updates, and a system mise on PATH.
+Do not run real apt, Homebrew, or mise upgrades to test code unless the user
+requests applying setup. The GitHub Actions matrix checks Ubuntu and macOS;
+report any platform not actually exercised.
 
 Keep README installation and update instructions concise and accurate. Keep
 agent entry files pointing here rather than duplicating this contract.

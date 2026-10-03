@@ -10,9 +10,12 @@ Run in your Ubuntu or Mac terminal:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/hellowin/machine-setup/main/bootstrap.sh)"
 ```
 
-Run as your normal user. Enter your password when asked, then open a new terminal.
-On a fresh Mac, finish Apple's Command Line Tools installation if prompted and
-rerun the command. Homebrew may also ask for confirmation.
+Run as your normal user, then open a new terminal. Ubuntu/WSL asks for your sudo
+password for apt operations. macOS never uses sudo: Corporate IT must provide
+Command Line Tools and install Homebrew through the managed software center.
+Setup warns and stops if Homebrew is missing; install it manually through IT,
+then rerun. With Homebrew available, setup installs/updates the declared formulae
+as your normal user. It never runs the Homebrew or Command Line Tools installers.
 If Ubuntu has no curl, install it first: `sudo apt-get update && sudo apt-get install -y curl`.
 
 ## What's included
@@ -25,7 +28,8 @@ The checkout lives in `~/.local/share/machine-setup`. Rerun the install command 
 update and reapply setup; existing checkout changes must be committed or stashed.
 Declared apt/Homebrew packages upgrade when newer versions are available; equal,
 newer, held, and pinned installations are preserved. No blanket OS upgrade runs.
-Mise uses native `self-update`, `install`, and `upgrade` behavior. Ranges such as
+macOS installs mise at `~/.local/bin/mise` and leaves any system/Homebrew mise
+untouched. Mise uses native `self-update`, `install`, and `upgrade` behavior. Ranges such as
 Node `26` track 26.x; exact pins stay pinned. Mise decides which runtime is active
 and how old versions are pruned; there is no custom mise version override.
 Existing shell settings are preserved, and conflicting mise configuration is not overwritten.
@@ -39,7 +43,7 @@ pull request for review:
 | --- | --- |
 | `config/tools.toml` | Enable mise tools and choose versions |
 | `config/packages.ubuntu.txt` | Ubuntu/WSL apt packages |
-| `config/packages.macos.txt` | macOS Homebrew packages |
+| `config/packages.macos.txt` | macOS Homebrew formulae |
 | `scripts/setup.sh` | Additional setup steps |
 
 Keep tokens and private keys outside this public repository. Credentials and

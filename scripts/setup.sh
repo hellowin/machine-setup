@@ -12,7 +12,8 @@ setup_main() {
     cat "$setup_dir/config/packages.$platform.txt"
     printf '\nWould read ~/.machine-setup.yml, ask about sudo only if the file is absent, and save the initial choice.\n'
     printf '\nWould install mise, link config/tools.toml into ~/.config/mise/conf.d,\nupgrade configured tools using mise, and add mise activation to .bashrc and .zshrc.\n'
-    printf '\nWould install or fast-forward update Oh My Zsh in ~/.oh-my-zsh.\nExisting Oh My Zsh configuration and its updater would be preserved; the login shell would not change.\n'
+    printf '\nWould install or fast-forward update Oh My Zsh in ~/.oh-my-zsh.\nExisting Oh My Zsh configuration and its updater would be preserved.\n'
+    printf '\nWould set Zsh as the account login shell using chsh after setup succeeds, unless it is already Zsh.\nWould use an executable Zsh registered in /etc/shells; chsh may require account authentication.\n'
     return 0
   fi
 
@@ -133,7 +134,9 @@ setup_main() {
     fi
   done
   bash "$setup_dir/scripts/verify.sh" "$mise_bin"
-  echo 'Setup complete. Open a new terminal to load mise; run zsh to use Oh My Zsh if your terminal uses Bash.'
+  . "$setup_dir/scripts/default-shell.sh"
+  set_default_zsh
+  echo 'Setup complete. Close this terminal and open a new session to use Zsh and mise.'
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then

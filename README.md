@@ -19,7 +19,7 @@ Only the sudo choice is configured through YAML.
 
 Ubuntu/WSL uses sudo for apt operations only when enabled. Without sudo, setup
 prints package commands for you or an administrator to run and continues with
-user-local mise and tools. Git and curl must already be available; build tools
+user-local mise and tools. Git, curl, and Zsh must already be available; build tools
 may still be needed for some mise runtimes. If a required tool is missing, install
 it manually and rerun. macOS requires existing Command Line Tools and Homebrew;
 install them yourself or through Corporate IT/managed software center, then rerun.
@@ -31,7 +31,8 @@ an administrator before running the download command.
 
 - Git, curl, and Ubuntu build prerequisites.
 - mise installation and activation in Bash and Zsh.
-- Node 26 and Python 3.14, configured in `config/tools.toml`.
+- Zsh and [Oh My Zsh](https://ohmyz.sh/).
+- Some tools configured in `config/tools.toml`.
 
 The checkout lives in `~/.local/share/machine-setup`. Rerun the install command to
 update and reapply setup; existing checkout changes must be committed or stashed.
@@ -43,6 +44,19 @@ Node `26` track 26.x; exact pins stay pinned. Mise decides which runtime is acti
 and how old versions are pruned; there is no custom mise version override.
 Existing shell settings are preserved, and conflicting mise configuration is not overwritten.
 
+Oh My Zsh is cloned into `~/.oh-my-zsh` and updated on reruns using fast-forward
+Git updates. Dirty checkouts, local commits, and conflicting managed settings
+stop setup without discarding changes. If `.zshrc` already loads Oh My Zsh independently,
+setup preserves that configuration and installation; continue using its own
+updater. Setup does not change your login shell: run `zsh` to try it, or select
+Zsh in your terminal settings. Zsh configuration honors an exported `ZDOTDIR`.
+
+For a setup-managed installation, set `ZSH_THEME="your-theme"` and/or
+`plugins=(git z ...)` before the `# machine-setup: Oh My Zsh` line in `.zshrc`.
+Try `gst` for Git status, `gd` for diff, and `z machine-setup` to jump back to
+this directory after visiting it. Autosuggestions, syntax highlighting, and
+fzf are optional additions and are not installed by this setup.
+
 ## Customize
 
 Edit these files on a feature branch in your development checkout, then open a
@@ -52,6 +66,7 @@ pull request for review:
 | --- | --- |
 | `.machine-setup.yml` | Default host configuration (copied into home; host edits are preserved) |
 | `config/tools.toml` | Enable mise tools and choose versions |
+| `config/oh-my-zsh.zsh` | Default Oh My Zsh theme, plugins, and update policy |
 | `config/packages.ubuntu.txt` | Ubuntu/WSL apt packages |
 | `config/packages.macos.txt` | macOS Homebrew formulae |
 | `scripts/setup.sh` | Additional setup steps |

@@ -12,6 +12,7 @@ setup_main() {
     cat "$setup_dir/config/packages.$platform.txt"
     printf '\nWould read ~/.machine-setup.yml, ask about sudo only if the file is absent, and save the initial choice.\n'
     printf '\nWould install mise, link config/tools.toml into ~/.config/mise/conf.d,\nupgrade configured tools using mise, and add mise activation to .bashrc and .zshrc.\n'
+    printf '\nWould install or fast-forward update Oh My Zsh in ~/.oh-my-zsh.\nExisting Oh My Zsh configuration and its updater would be preserved; the login shell would not change.\n'
     return 0
   fi
 
@@ -24,6 +25,9 @@ setup_main() {
       exit 1
     fi
   fi
+
+  . "$setup_dir/scripts/oh-my-zsh.sh"
+  preflight_oh_my_zsh
 
   . "$setup_dir/scripts/packages.sh"
 
@@ -41,7 +45,7 @@ setup_main() {
       printf 'Skipping apt updates and installs because sudo is disabled. Run yourself or ask an administrator:\n  sudo apt-get update\n  sudo apt-get install -y --no-remove'
       printf ' %s' "${packages[@]}"
       printf '\n'
-      for tool in git curl; do
+      for tool in git curl zsh; do
         command -v "$tool" >/dev/null 2>&1 || {
           printf 'Missing required tool: %s. Install it manually, then rerun.\n' "$tool" >&2
           exit 1
@@ -116,17 +120,20 @@ setup_main() {
   "$mise_bin" install
   "$mise_bin" upgrade
 
+  setup_oh_my_zsh
+
   # Quote the executable path for Bash/Zsh; this also handles paths with spaces.
   printf -v quoted_mise '%q' "$mise_bin"
   for shell_name in bash zsh; do
     rc_file=$HOME/.${shell_name}rc
+    if [ "$shell_name" = zsh ]; then rc_file=$zsh_rc; fi
     activation="eval \"\$($quoted_mise activate $shell_name)\""
     if ! grep -Fqx "$activation" "$rc_file" 2>/dev/null; then
       printf '\n# machine-setup: mise tools and environment\n%s\n' "$activation" >> "$rc_file"
     fi
   done
   bash "$setup_dir/scripts/verify.sh" "$mise_bin"
-  echo 'Setup complete. Open a new terminal to load mise.'
+  echo 'Setup complete. Open a new terminal to load mise; run zsh to use Oh My Zsh if your terminal uses Bash.'
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then

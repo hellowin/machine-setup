@@ -34,6 +34,7 @@ run_setup() {
 for platform in ubuntu macos; do
   HOME="$scratch/home" run_setup "$platform" --dry-run > "$scratch/$platform-plan"
   grep -q 'git' "$scratch/$platform-plan"
+  grep -q 'Would install or fast-forward update Oh My Zsh' "$scratch/$platform-plan"
 done
 # Exercise actual setup control flow using isolated homes and fake installers.
 mkdir -p "$scratch/bin"
@@ -72,6 +73,28 @@ cat > "$scratch/bin/curl" <<'MOCK'
 echo 'Unexpected installer download in isolated check.' >&2
 exit 1
 MOCK
+cat > "$scratch/bin/git" <<'MOCK'
+#!/usr/bin/env bash
+case "${1:-}" in
+  clone)
+    for arg in "$@"; do destination=$arg; done
+    mkdir -p "$destination/.git"
+    touch "$destination/oh-my-zsh.sh"
+    ;;
+  -C)
+    case "${3:-}" in
+      remote) echo 'https://github.com/ohmyzsh/ohmyzsh.git' ;;
+      symbolic-ref) echo master ;;
+      status|fetch|merge-base|merge) exit 0 ;;
+      *) exit 1 ;;
+    esac ;;
+  *) exit 1 ;;
+esac
+MOCK
+cat > "$scratch/bin/zsh" <<'MOCK'
+#!/usr/bin/env bash
+exit 0
+MOCK
 chmod +x "$scratch/bin/"*
 for platform in ubuntu macos; do
   test_home=$scratch/home-$platform
@@ -91,6 +114,8 @@ MOCK
   done
   [ "$(grep -c 'activate bash' "$test_home/.bashrc")" -eq 1 ]
   [ "$(grep -c 'activate zsh' "$test_home/.zshrc")" -eq 1 ]
+  [ "$(grep -c 'machine-setup: Oh My Zsh' "$test_home/.zshrc")" -eq 1 ]
+  [ -f "$test_home/.oh-my-zsh/oh-my-zsh.sh" ]
   grep -q '# Existing shell configuration' "$test_home/.bashrc"
   [ -L "$test_home/.config/mise/conf.d/machine-setup.toml" ]
   rm "$test_home/.config/mise/conf.d/machine-setup.toml"
@@ -104,3 +129,4 @@ done
 printf 'Syntax, previews, repeated setup, and configuration preservation checks passed.\n'
 
 python3 tests/test_updates.py
+python3 -B tests/test_oh_my_zsh.py

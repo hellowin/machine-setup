@@ -96,10 +96,8 @@ git push -u origin feature/my-change
 gh pr create --base main
 ```
 
-After a merge, CI validates `main` again and uploads a source archive with a
-SHA-256 checksum as a GitHub Actions artifact, retained for 30 days. Download it
-from the successful workflow run. The install URL above continues to follow
-`main`; CI does not install software on a real machine or publish GitHub releases.
+After a merge, CI validates `main` again. The install URL above continues to
+follow `main`.
 
 ## Agents
 

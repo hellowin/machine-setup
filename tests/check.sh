@@ -82,6 +82,9 @@ case "${1:-}" in
     mkdir -p "$destination/.git"
     touch "$destination/oh-my-zsh.sh"
     ;;
+  config)
+    case "${3:-}" in --get-all) exit 1 ;; --add) exit 0 ;; *) exit 1 ;; esac
+    ;;
   -C)
     case "${3:-}" in
       remote) echo 'https://github.com/ohmyzsh/ohmyzsh.git' ;;
@@ -93,6 +96,10 @@ case "${1:-}" in
 esac
 MOCK
 cat > "$scratch/bin/zsh" <<'MOCK'
+#!/usr/bin/env bash
+exit 0
+MOCK
+cat > "$scratch/bin/vim" <<'MOCK'
 #!/usr/bin/env bash
 exit 0
 MOCK
@@ -146,3 +153,4 @@ python3 tests/test_updates.py
 python3 -B tests/test_oh_my_zsh.py
 python3 -B tests/test_default_shell.py
 python3 -B tests/test_workspaces.py
+python3 -B tests/test_git_preferences.py

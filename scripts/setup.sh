@@ -15,6 +15,7 @@ setup_main() {
     printf '\nWould install or fast-forward update Oh My Zsh in ~/.oh-my-zsh.\nExisting Oh My Zsh configuration and its updater would be preserved.\n'
     printf '\nWould set Zsh as the account login shell using chsh after setup succeeds, unless it is already Zsh.\nWould use an executable Zsh registered in /etc/shells; chsh may require account authentication.\n'
     printf '\nWould create configured workspaces, guide GitHub browser login and SSH key generation,\nregister public authentication/signing keys, and configure Git identities and signing.\n'
+    printf '\nWould configure Vim for Git commit messages and interactive rebases.\n'
     return 0
   fi
 
@@ -121,6 +122,9 @@ setup_main() {
   # Do not compare versions ourselves, bump requests, or force reinstalls.
   "$mise_bin" install
   "$mise_bin" upgrade
+
+  . "$setup_dir/scripts/git.sh"
+  setup_git_preferences
 
   # Parse YAML through mise-managed tools; an absent/empty workspace list is a no-op.
   "$mise_bin" exec -- python "$setup_dir/scripts/workspaces.py" "$setup_config"

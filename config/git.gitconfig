@@ -1,0 +1,5 @@
+# Shared Git preferences. Keep identities and keys in the host configuration.
+[core]
+    editor = vim
+[sequence]
+    editor = vim

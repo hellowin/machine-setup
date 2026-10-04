@@ -6,29 +6,36 @@ for file in bootstrap.sh scripts/*.sh tests/*.sh; do
 done
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
-# Preview must work without credentials, a writable home, or installer calls.
-HOME="$scratch/home" bash bootstrap.sh --dry-run > "$scratch/local-plan"
-[ ! -e "$scratch/home" ]
+# YAML previews must not prompt or write anything.
+mkdir -p "$scratch/home"
+printf 'sudoEnabled: false\ndryRun: true\n' > "$scratch/home/.machine-setup.yml"
+HOME="$scratch/home" bash bootstrap.sh > "$scratch/local-plan"
 grep -q 'Would install mise' "$scratch/local-plan"
-HOME="$scratch/home" MACHINE_SETUP_DIR="$scratch/checkout" bash bootstrap.sh --dry-run \
-  --repo https://github.com/example/machine-setup.git > "$scratch/remote-plan"
+[ "$(ls -A "$scratch/home" | wc -l | tr -d ' ')" -eq 1 ]
+for option in --sudo --no-sudo --dry-run --repo --ref --help --unknown ubuntu; do
+  for entrypoint in bootstrap.sh scripts/setup.sh; do
+    if HOME="$scratch/home" bash "$entrypoint" "$option" > /dev/null 2>&1; then
+      echo "CLI argument unexpectedly accepted: $entrypoint $option" >&2; exit 1
+    fi
+  done
+done
+printf 'sudoEnabled: false\ndryRun: true\nrepository: https://github.com/example/machine-setup.git\nref: release\nsetupDir: %s/checkout\n' "$scratch" > "$scratch/home/.machine-setup.yml"
+HOME="$scratch/home" MACHINE_SETUP_DIR="$scratch/ignored" bash bootstrap.sh > "$scratch/remote-plan"
+grep -q "at release into $scratch/checkout" "$scratch/remote-plan"
 [ ! -e "$scratch/checkout" ]
-if bash bootstrap.sh --unknown > /dev/null 2>&1; then
-  echo 'Unknown option unexpectedly accepted.' >&2; exit 1
-fi
-if bash bootstrap.sh --repo > /dev/null 2>&1; then
-  echo 'Missing repo argument unexpectedly accepted.' >&2; exit 1
-fi
-if bash bootstrap.sh --dry-run --repo file:///tmp/repo > /dev/null 2>&1; then
-  echo 'Non-HTTPS repository unexpectedly accepted.' >&2; exit 1
-fi
-# The exact download-and-run form must default to our public repository.
-HOME="$scratch/home" bash -c "$(cat bootstrap.sh)" -- --dry-run > "$scratch/default-plan"
+printf 'sudoEnabled: false\ndryRun: true\n' > "$scratch/home/.machine-setup.yml"
+# The exact download-and-run form defaults to the public repository.
+HOME="$scratch/home" bash -c "$(cat bootstrap.sh)" > "$scratch/default-plan"
 grep -q 'https://github.com/hellowin/machine-setup.git' "$scratch/default-plan"
-[ ! -e "$scratch/home" ]
-# Check both package manifests even when running on only one platform.
+# Internal helper allows both package manifests to be tested on each CI host.
+run_setup() {
+  bash -c 'set -euo pipefail; setup_dir=$PWD; platform=$1;
+    . ./bootstrap.sh; read_setup_config;
+    if ! "$dry_run"; then choose_setup_sudo; fi;
+    . ./scripts/setup.sh; setup_main' test "$1"
+}
 for platform in ubuntu macos; do
-  bash scripts/setup.sh "$platform" --dry-run > "$scratch/$platform-plan"
+  HOME="$scratch/home" run_setup "$platform" > "$scratch/$platform-plan"
   grep -q 'git' "$scratch/$platform-plan"
 done
 # Exercise actual setup control flow using isolated homes and fake installers.
@@ -78,11 +85,12 @@ case "${1:-}" in trust|install|upgrade|self-update|--version|ls) exit 0 ;; *) ex
 MOCK
   chmod +x "$test_home/.local/bin/mise"
   printf '# Existing shell configuration\n' > "$test_home/.bashrc"
-  sudo_option=--no-sudo
-  if [ "$platform" = ubuntu ]; then sudo_option=--sudo; fi
+  sudo_choice=false
+  if [ "$platform" = ubuntu ]; then sudo_choice=true; fi
+  printf 'sudoEnabled: %s\n' "$sudo_choice" > "$test_home/.machine-setup.yml"
   for iteration in 1 2; do
     MOCK_PLATFORM="$platform" HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" PATH="$scratch/bin:$PATH" \
-      bash scripts/setup.sh "$platform" "$sudo_option" > "$scratch/$platform-apply"
+      run_setup "$platform" > "$scratch/$platform-apply"
   done
   [ "$(grep -c 'activate bash' "$test_home/.bashrc")" -eq 1 ]
   [ "$(grep -c 'activate zsh' "$test_home/.zshrc")" -eq 1 ]
@@ -91,7 +99,7 @@ MOCK
   rm "$test_home/.config/mise/conf.d/machine-setup.toml"
   printf 'existing config\n' > "$test_home/.config/mise/conf.d/machine-setup.toml"
   if MOCK_PLATFORM="$platform" HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" PATH="$scratch/bin:$PATH" \
-    bash scripts/setup.sh "$platform" "$sudo_option" > /dev/null 2>&1; then
+    run_setup "$platform" > /dev/null 2>&1; then
     echo 'Conflicting config unexpectedly overwritten.' >&2; exit 1
   fi
   grep -qx 'existing config' "$test_home/.config/mise/conf.d/machine-setup.toml"

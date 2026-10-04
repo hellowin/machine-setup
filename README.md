@@ -10,11 +10,12 @@ Run in your Ubuntu or Mac terminal:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/hellowin/machine-setup/main/bootstrap.sh)"
 ```
 
-Run as your normal user, then open a new terminal. Setup first asks whether you
-have access to sudo, on either OS, and saves the answer in
-`~/.machine-setup.yml`. Reruns reuse that choice. Use `-- --sudo` or
-`-- --no-sudo` on the install command to change it, or edit `sudoEnabled` in the
-YAML file (`true`, `false`, or `null` to ask again).
+Run as your normal user, then open a new terminal. Setup asks whether you have
+access to sudo only when `~/.machine-setup.yml` does not exist, and saves your
+answer there. Reruns read the YAML file without prompting. Change
+`sudoEnabled` to `true` or `false` in that file to change the choice. An existing
+file with a missing, null, or invalid sudo setting must be corrected before setup.
+Setup accepts no CLI arguments.
 
 Ubuntu/WSL uses sudo for apt operations only when enabled. Without sudo, setup
 prints package commands for you or an administrator to run and continues with
@@ -60,17 +61,23 @@ personal/work account login are configured separately.
 
 ## Preview and develop
 
+Set `dryRun: true` in `~/.machine-setup.yml` to preview without applying setup.
+For a new machine, create the file with `sudoEnabled: true` or `false` and
+`dryRun: true` before running the install command. Set `dryRun: false` to apply.
+
 ```bash
-bash bootstrap.sh --dry-run  # Preview your local checkout
-bash bootstrap.sh           # Ask about sudo on first run, then apply
-bash bootstrap.sh --no-sudo  # Apply without privileged operations
-bash tests/check.sh         # Run checks without installing packages
+bash bootstrap.sh    # Read YAML; ask about sudo only if the file is absent
+bash tests/check.sh  # Run checks without installing packages
 ```
 
-To preview on a new machine, add `-- --dry-run` to the install command.
-For a release, replace `main` in the download URL with its tag and add
-`-- --ref TAG` to the command. Use `latest` in mise configuration to follow its
-latest channel, or retain ranges/pins to limit updates.
+Optional YAML keys `repository` (HTTPS Git URL), `ref` (branch or tag), and
+`setupDir` (absolute checkout path) configure the remote checkout. Without a
+repository setting, a local bootstrap applies its own checkout; the downloaded
+entrypoint uses the public repository on `main`. The default destination is
+`~/.local/share/machine-setup`. Environment variables do not override these
+settings. For a release, replace `main` in the download URL with its tag and set
+`ref` to that tag in YAML. Use `latest` in mise configuration to follow its latest
+channel, or retain ranges/pins to limit updates.
 
 CI checks Ubuntu and macOS syntax, previews, safe reruns, update behavior, config
 preservation, and whitespace with fake installers. Full clean-machine

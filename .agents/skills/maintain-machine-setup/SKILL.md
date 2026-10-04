@@ -15,9 +15,11 @@ permission to install software on the operator's machine or publish changes.
   WSL Ubuntu, and macOS with IT-provisioned Command Line Tools. Use Bash
   3.2-compatible shell features for macOS.
 - **Privilege access is a user choice, independent of OS.** Ask whether sudo is
-  available before applying setup, persist `sudoEnabled` in
-  `~/.machine-setup.yml`, and reuse it on reruns. `--sudo` and `--no-sudo` override
-  and persist that choice. Keep the repository's `.machine-setup.yml` as the
+  available only when `~/.machine-setup.yml` does not exist, persist
+  `sudoEnabled`, and reuse it on reruns. Existing host files must specify
+  `sudoEnabled: true` or `false`; never prompt to repair them. All setup settings
+  come from YAML; reject CLI arguments and do not use environment overrides
+  for those settings. Keep the repository's `.machine-setup.yml` as the
   default template; do not overwrite unrelated host configuration.
 - Ubuntu/WSL uses sudo for apt metadata refreshes and guarded package updates
   only when enabled. Without sudo, show manual package instructions and continue

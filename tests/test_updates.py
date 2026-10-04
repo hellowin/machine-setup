@@ -30,6 +30,16 @@ class MockTests(unittest.TestCase):
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
 
+    def run_setup(self, platform, *, answer="", root=ROOT):
+        # Exercise setup with either platform on both CI hosts, without a public
+        # platform override. Bootstrap integration is tested separately.
+        return subprocess.run(
+            ["bash", "-c", 'set -euo pipefail; setup_dir=$1; platform=$2; '
+             '. "$setup_dir/bootstrap.sh"; read_setup_config; '
+             'if ! "$dry_run"; then choose_setup_sudo; fi; '
+             '. "$setup_dir/scripts/setup.sh"; setup_main', "test", str(root), platform],
+            env=self.env, input=answer, capture_output=True, text=True)
+
     def run_packages(self, function, packages):
         return subprocess.run(
             ["bash", "-c", 'set -euo pipefail; sudo_enabled=true; setup_dir=$1; . "$1/scripts/packages.sh"; shift; "$@"',
@@ -127,8 +137,7 @@ elif args[0] not in ('update','install','upgrade'):
         return home
 
     def run_macos(self):
-        return subprocess.run(["bash", str(ROOT / "scripts/setup.sh"), "macos"],
-                              env=self.env, input="no\n", capture_output=True, text=True)
+        return self.run_setup("macos", answer="no\n")
 
     def test_macos_missing_clt_stops_without_installers_or_writes(self):
         home = self.macos_mocks()
@@ -158,8 +167,8 @@ elif args[0] not in ('update','install','upgrade'):
         script.write_text(script.read_text().replace('/opt/homebrew/bin/brew', str(self.base / 'absent-brew'))
                           .replace('/usr/local/bin/brew', str(self.base / 'absent-brew')))
         result = subprocess.run(["bash", "-c",
-                                'command() { if [ "$*" = "-v brew" ]; then return 1; fi; builtin command "$@"; }; export -f command; bash "$1" macos --no-sudo',
-                                "test", str(script)], env=self.env, capture_output=True, text=True)
+                                'command() { if [ "$*" = "-v brew" ]; then return 1; fi; builtin command "$@"; }; export -f command; . "$1/bootstrap.sh"; read_setup_config; choose_setup_sudo; setup_dir=$1; platform=macos; . "$1/scripts/setup.sh"; setup_main',
+                                "test", str(checkout)], env=self.env, input="no\n", capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Warning: Homebrew", result.stderr)
         self.assertIn("managed software center", result.stderr)
@@ -216,10 +225,10 @@ with open(os.environ['MOCK_LOG'],'a') as f: f.write(json.dumps(sys.argv[1:])+'\\
 """)
         (home / ".local/bin/mise").symlink_to(self.bin / "mise")
         self.env["XDG_CONFIG_HOME"] = str(home / ".config")
+        (home / ".machine-setup.yml").write_text("sudoEnabled: true\n")
         before = (ROOT / "config/tools.toml").read_bytes()
         for _ in range(2):
-            result = subprocess.run(["bash", str(ROOT / "scripts/setup.sh"), "ubuntu", "--sudo"],
-                                    env=self.env, capture_output=True, text=True)
+            result = self.run_setup("ubuntu")
             self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.calls()
         self.assertEqual(calls.count(["self-update", "--yes"]), 2)
@@ -243,9 +252,8 @@ class PrivilegeTests(MockTests):
         mise.chmod(0o755)
         return home
 
-    def run_ubuntu(self, *options, answer=""):
-        return subprocess.run(["bash", str(ROOT / "scripts/setup.sh"), "ubuntu", *options],
-                              env=self.env, input=answer, capture_output=True, text=True)
+    def run_ubuntu(self, *, answer=""):
+        return self.run_setup("ubuntu", answer=answer)
 
     def test_ubuntu_no_sudo_prompts_persists_and_reuses_choice(self):
         home = self.ubuntu_mocks()
@@ -264,17 +272,48 @@ class PrivilegeTests(MockTests):
         self.assertEqual(config.stat().st_mtime_ns, modified)
         self.assertEqual((ROOT / ".machine-setup.yml").read_bytes(), before)
 
-    def test_override_preserves_other_yaml_settings(self):
+    def test_entrypoints_prompt_once_then_reuse_yaml_without_environment_override(self):
+        home = self.ubuntu_mocks()
+        self.mock("uname", "print('Darwin')\n")
+        self.mock("xcode-select", "import sys\nsys.exit(0 if sys.argv[1:]==['-p'] else 98)\n")
+        self.mock("ruby", "import sys\nsys.stdin.read()\nprint('keep')\n")
+        self.mock("brew", "pass\n")
+        self.env["MACHINE_SETUP_DIR"] = str(self.base / "ignored")
+        for entrypoint, answer in (("bootstrap.sh", "no\n"), ("scripts/setup.sh", "")):
+            result = subprocess.run(["bash", str(ROOT / entrypoint)], env=self.env,
+                                    input=answer, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stderr.count("Do you have access to sudo?"), int(bool(answer)))
+            self.assertIn("sudoEnabled: false", (home / ".machine-setup.yml").read_text())
+        self.assertFalse((self.base / "ignored").exists())
+
+    def test_invalid_yaml_options_fail_without_prompt_or_mutation(self):
         home = self.ubuntu_mocks()
         config = home / ".machine-setup.yml"
-        config.write_text("# My settings\nsudoEnabled: true\nextra: keep\neditor:\n  name: vim\n")
-        result = self.run_ubuntu("--no-sudo")
+        for settings in ("dryRun: maybe\n", "dryRun: true\ndryRun: false\n",
+                         "repository: file:///tmp/repo\n", "ref: -main\n",
+                         "setupDir: relative/path\n", "ref: main\nref: other\n"):
+            with self.subTest(settings=settings):
+                content = "sudoEnabled: false\n" + settings
+                config.write_text(content)
+                result = self.run_ubuntu()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn("Do you have access", result.stderr)
+                self.assertEqual(config.read_text(), content)
+                self.assertFalse((home / ".config").exists())
+
+    def test_yaml_changes_privileges_and_preserves_other_settings(self):
+        home = self.ubuntu_mocks()
+        config = home / ".machine-setup.yml"
+        config.write_text("# My settings\nsudoEnabled: false\nextra: keep\neditor:\n  name: vim\n")
+        result = self.run_ubuntu(answer="no\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(config.read_text(), "# My settings\nsudoEnabled: false\nextra: keep\neditor:\n  name: vim\n")
         self.mock("sudo", "import os,sys,json\nwith open(os.environ['MOCK_LOG'],'a') as f: f.write(json.dumps(sys.argv[1:])+'\\n')\n")
         self.mock("apt-mark", "pass\n")
         self.mock("apt-cache", "print('Installed: (none)\\nCandidate: 1.0')\n")
-        result = self.run_ubuntu("--sudo")
+        config.write_text(config.read_text().replace("sudoEnabled: false", "sudoEnabled: true"))
+        result = self.run_ubuntu()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("sudoEnabled: true", config.read_text())
         self.assertEqual(self.calls()[0], ["apt-get", "update"])
@@ -294,22 +333,22 @@ MOCK
 chmod +x "$MISE_INSTALL_PATH"
 """)
         self.mock("curl", f"import sys,shutil\nshutil.copyfile({str(installer)!r}, sys.argv[sys.argv.index('-o')+1])\n")
-        result = self.run_ubuntu("--no-sudo")
+        result = self.run_ubuntu(answer="no\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue((home / ".local/bin/mise").is_file())
 
-    def test_yaml_without_sudo_key_is_extended_and_null_asks_again(self):
+    def test_existing_yaml_without_boolean_sudo_fails_without_prompt_or_writes(self):
         home = self.ubuntu_mocks()
         config = home / ".machine-setup.yml"
-        config.write_text("editor: vim\n")
-        result = self.run_ubuntu("--no-sudo")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(config.read_text(), "editor: vim\n\nsudoEnabled: false\n")
-        config.write_text("sudoEnabled: null # User preference\n")
-        result = self.run_ubuntu(answer="no\n")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Do you have access", result.stderr)
-        self.assertEqual(config.read_text(), "sudoEnabled: false # User preference\n")
+        for content in ("editor: vim\n", "sudoEnabled: null # User preference\n"):
+            with self.subTest(content=content):
+                config.write_text(content)
+                result = self.run_ubuntu(answer="no\n")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn("Do you have access", result.stderr)
+                self.assertIn("Set sudoEnabled", result.stderr)
+                self.assertEqual(config.read_text(), content)
+                self.assertFalse((home / ".config").exists())
 
     def test_invalid_or_linked_yaml_fails_before_installation(self):
         home = self.ubuntu_mocks()
@@ -319,16 +358,16 @@ chmod +x "$MISE_INSTALL_PATH"
                         "sudoEnabled: true\nsudoEnabled: false\n"):
             with self.subTest(content=content):
                 config.write_text(content)
-                result = self.run_ubuntu("--no-sudo")
+                result = self.run_ubuntu(answer="no\n")
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn("Invalid sudo configuration", result.stderr)
+                self.assertIn("Invalid configuration", result.stderr)
                 self.assertEqual(config.read_text(), content)
                 self.assertFalse((home / ".config").exists())
         config.unlink()
         target = self.base / "external.yml"
         target.write_text("sudoEnabled: false\n")
         config.symlink_to(target)
-        result = self.run_ubuntu("--no-sudo")
+        result = self.run_ubuntu(answer="no\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("regular file", result.stderr)
 
@@ -336,7 +375,7 @@ chmod +x "$MISE_INSTALL_PATH"
         home = self.ubuntu_mocks()
         result = self.run_ubuntu()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("--no-sudo", result.stderr)
+        self.assertIn("Rerun interactively", result.stderr)
         self.assertFalse((home / ".machine-setup.yml").exists())
 
     def test_no_sudo_rejects_system_mise_symlink(self):
@@ -344,16 +383,20 @@ chmod +x "$MISE_INSTALL_PATH"
         local = home / ".local/bin/mise"
         local.unlink()
         local.symlink_to(self.bin / "mise")
-        result = self.run_ubuntu("--no-sudo")
+        result = self.run_ubuntu(answer="no\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("writable user-local mise", result.stderr)
 
-    def test_preview_does_not_prompt_or_write_even_with_override(self):
+    def test_yaml_preview_does_not_prompt_or_write(self):
         home = self.ubuntu_mocks()
-        result = self.run_ubuntu("--dry-run", "--sudo")
+        config = home / ".machine-setup.yml"
+        config.write_text("sudoEnabled: false\ndryRun: true\n")
+        before = config.read_bytes()
+        result = self.run_ubuntu()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("Do you have access", result.stderr)
-        self.assertFalse((home / ".machine-setup.yml").exists())
+        self.assertEqual(config.read_bytes(), before)
+        self.assertFalse((home / ".config").exists())
 
     @unittest.skipUnless(Path("/etc/os-release").exists() and
                          "ID=ubuntu" in Path("/etc/os-release").read_text(),
@@ -363,7 +406,7 @@ chmod +x "$MISE_INSTALL_PATH"
         # Hide even a host Git without changing PATH's other required commands.
         prefix = 'command() { if [ "$*" = "-v git" ]; then return 1; fi; builtin command "$@"; }; '
         result = subprocess.run(["bash", "-c", prefix + (ROOT / "bootstrap.sh").read_text(),
-                                 "test", "--no-sudo"], env=self.env,
+                                 "test"], env=self.env, input="no\n",
                                 capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Git is required", result.stderr)

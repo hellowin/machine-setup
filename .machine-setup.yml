@@ -1,3 +1,9 @@
-# Copied to ~/.machine-setup.yml on installation; host choices stay on the host.
-# null asks on first run; true enables sudo, false skips privileged operations.
+# Copied to ~/.machine-setup.yml on first setup; host edits are preserved.
+# Setup asks about sudo only when the host file does not exist.
+# In an existing host file, sudoEnabled must be true or false.
 sudoEnabled: null
+dryRun: false
+# Optional remote checkout settings (setupDir must be an absolute path):
+# repository: https://github.com/hellowin/machine-setup.git
+# ref: main
+# setupDir: /absolute/path/to/machine-setup

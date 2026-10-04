@@ -2,10 +2,6 @@
 description = "Apply the machine setup (Ubuntu uses sudo; macOS runs as your user)"
 run = "bash bootstrap.sh"
 
-[tasks.plan]
-description = "Preview setup without modifying the machine"
-run = "bash bootstrap.sh --dry-run"
-
 [tasks.verify]
 description = "Check the installed base tools"
 run = "bash scripts/verify.sh"

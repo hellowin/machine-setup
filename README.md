@@ -30,6 +30,7 @@ an administrator before running the download command.
 ## What's included
 
 - Git, curl, and Ubuntu build prerequisites.
+- Vim for Git commit messages and interactive rebases.
 - mise installation and activation in Bash and Zsh.
 - Zsh and [Oh My Zsh](https://ohmyz.sh/).
 - Some tools configured in `config/tools.toml`.
@@ -78,6 +79,7 @@ pull request for review:
 | --- | --- |
 | `.machine-setup.yml` | Default host configuration (copied into home; host edits are preserved) |
 | `config/tools.toml` | Enable mise tools and choose versions |
+| `config/git.gitconfig` | Shared Git editor preferences (Vim for commits and rebases) |
 | `config/oh-my-zsh.zsh` | Default Oh My Zsh theme, plugins, and update policy |
 | `config/packages.ubuntu.txt` | Ubuntu/WSL apt packages |
 | `config/packages.macos.txt` | macOS Homebrew formulae |
@@ -85,6 +87,17 @@ pull request for review:
 
 Keep tokens, private keys, and personal/work identities outside this public
 repository. Configure workspaces in the host file as described below.
+
+Setup includes `config/git.gitconfig` in your global Git configuration, including
+when no workspaces are declared. Edit this file to change the repository's Git
+editor defaults. Existing unrelated Git settings are preserved. `GIT_EDITOR`,
+`GIT_SEQUENCE_EDITOR`, and repository-specific settings can override these defaults;
+unset any editor environment variables that still select Nano. Without sudo,
+Vim must already be installed on Ubuntu.
+
+Checkout origin checks read the stored URL, so GitHub HTTPS-to-SSH workspace
+rewrites do not block reruns. HTTPS and standard SSH URLs for the same GitHub
+repository are accepted; unrelated repositories are still rejected.
 
 ## Git workspaces
 

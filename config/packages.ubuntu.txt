@@ -6,3 +6,4 @@ zsh
 unzip
 build-essential
 openssh-client
+vim

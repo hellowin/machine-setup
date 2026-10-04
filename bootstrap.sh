@@ -86,6 +86,20 @@ Environment: MACHINE_SETUP_DIR overrides the remote checkout destination.
 HELP
 }
 
+# Compare stored repository identities, without applying Git insteadOf rewrites.
+repository_identity() {
+  local identity=$1
+  case "$identity" in
+    https://github.com/*) identity=${identity#https://github.com/} ;;
+    git@github.com:*) identity=${identity#git@github.com:} ;;
+    ssh://git@github.com/*) identity=${identity#ssh://git@github.com/} ;;
+    *) printf '%s\n' "$identity"; return ;;
+  esac
+  identity=${identity%/}
+  identity=${identity%.git}
+  printf 'github.com/%s\n' "$identity"
+}
+
 bootstrap_main() {
   repo=''
   ref=main
@@ -157,7 +171,13 @@ bootstrap_main() {
     fi
     if [ -e "$setup_dir" ]; then
       [ -d "$setup_dir/.git" ] || { echo 'Checkout destination exists and is not a Git repository.' >&2; exit 1; }
-      [ "$(git -C "$setup_dir" remote get-url origin)" = "$repo" ] || { echo 'Existing checkout has a different origin.' >&2; exit 1; }
+      stored_origin=$(git -C "$setup_dir" config --get remote.origin.url) || {
+        echo 'Existing checkout has no readable origin URL.' >&2; exit 1;
+      }
+      [ "$(repository_identity "$stored_origin")" = "$(repository_identity "$repo")" ] || {
+        printf 'Existing checkout has a different origin. Inspect: git -C %q config --get remote.origin.url\n' "$setup_dir" >&2
+        exit 1
+      }
       [ -z "$(git -C "$setup_dir" status --porcelain)" ] || { echo 'Commit or stash checkout changes before updating.' >&2; exit 1; }
       git -C "$setup_dir" fetch origin "$ref"
       # Fast-forward only; never discard local commits or switch branches silently.

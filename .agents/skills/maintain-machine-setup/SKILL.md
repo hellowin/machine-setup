@@ -17,10 +17,11 @@ permission to install software on the operator's machine or publish changes.
 - **Privilege access is a user choice, independent of OS.** Ask whether sudo is
   available only when `~/.machine-setup.yml` does not exist, persist
   `sudoEnabled`, and reuse it on reruns. Existing host files must specify
-  `sudoEnabled: true` or `false`; never prompt to repair them. All setup settings
-  come from YAML; reject CLI arguments and do not use environment overrides
-  for those settings. Keep the repository's `.machine-setup.yml` as the
-  default template; do not overwrite unrelated host configuration.
+  `sudoEnabled: true` or `false`; never prompt to repair them. Only sudo is
+  configured through YAML; reject `--sudo` and `--no-sudo`.
+  Preserve `--dry-run`, `--repo`, `--ref`, help, the setup platform argument,
+  and the `MACHINE_SETUP_DIR` environment override. Keep the repository's
+  `.machine-setup.yml` as the default template; do not overwrite unrelated host configuration.
 - Ubuntu/WSL uses sudo for apt metadata refreshes and guarded package updates
   only when enabled. Without sudo, show manual package instructions and continue
   user-local setup if required tools are present. Never try unprivileged apt

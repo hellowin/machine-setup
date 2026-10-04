@@ -6,36 +6,33 @@ for file in bootstrap.sh scripts/*.sh tests/*.sh; do
 done
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
-# YAML previews must not prompt or write anything.
+# CLI previews must not prompt or write anything, even without a host YAML file.
 mkdir -p "$scratch/home"
-printf 'sudoEnabled: false\ndryRun: true\n' > "$scratch/home/.machine-setup.yml"
-HOME="$scratch/home" bash bootstrap.sh > "$scratch/local-plan"
+HOME="$scratch/home" bash bootstrap.sh --dry-run > "$scratch/local-plan"
 grep -q 'Would install mise' "$scratch/local-plan"
-[ "$(ls -A "$scratch/home" | wc -l | tr -d ' ')" -eq 1 ]
-for option in --sudo --no-sudo --dry-run --repo --ref --help --unknown ubuntu; do
-  for entrypoint in bootstrap.sh scripts/setup.sh; do
-    if HOME="$scratch/home" bash "$entrypoint" "$option" > /dev/null 2>&1; then
-      echo "CLI argument unexpectedly accepted: $entrypoint $option" >&2; exit 1
-    fi
-  done
+[ -z "$(ls -A "$scratch/home")" ]
+for option in --sudo --no-sudo --unknown; do
+  if HOME="$scratch/home" bash bootstrap.sh "$option" > /dev/null 2>&1; then
+    echo "CLI argument unexpectedly accepted: $option" >&2; exit 1
+  fi
+  if HOME="$scratch/home" bash scripts/setup.sh ubuntu "$option" > /dev/null 2>&1; then
+    echo "Setup argument unexpectedly accepted: $option" >&2; exit 1
+  fi
 done
-printf 'sudoEnabled: false\ndryRun: true\nrepository: https://github.com/example/machine-setup.git\nref: release\nsetupDir: %s/checkout\n' "$scratch" > "$scratch/home/.machine-setup.yml"
-HOME="$scratch/home" MACHINE_SETUP_DIR="$scratch/ignored" bash bootstrap.sh > "$scratch/remote-plan"
+HOME="$scratch/home" bash bootstrap.sh --help > "$scratch/help"
+grep -q -- '--ref' "$scratch/help"
+HOME="$scratch/home" MACHINE_SETUP_DIR="$scratch/checkout" bash bootstrap.sh --dry-run \
+  --repo https://github.com/example/machine-setup.git --ref release > "$scratch/remote-plan"
 grep -q "at release into $scratch/checkout" "$scratch/remote-plan"
 [ ! -e "$scratch/checkout" ]
-printf 'sudoEnabled: false\ndryRun: true\n' > "$scratch/home/.machine-setup.yml"
 # The exact download-and-run form defaults to the public repository.
-HOME="$scratch/home" bash -c "$(cat bootstrap.sh)" > "$scratch/default-plan"
+HOME="$scratch/home" bash -c "$(cat bootstrap.sh)" -- --dry-run > "$scratch/default-plan"
 grep -q 'https://github.com/hellowin/machine-setup.git' "$scratch/default-plan"
-# Internal helper allows both package manifests to be tested on each CI host.
 run_setup() {
-  bash -c 'set -euo pipefail; setup_dir=$PWD; platform=$1;
-    . ./bootstrap.sh; read_setup_config;
-    if ! "$dry_run"; then choose_setup_sudo; fi;
-    . ./scripts/setup.sh; setup_main' test "$1"
+  bash scripts/setup.sh "$@"
 }
 for platform in ubuntu macos; do
-  HOME="$scratch/home" run_setup "$platform" > "$scratch/$platform-plan"
+  HOME="$scratch/home" run_setup "$platform" --dry-run > "$scratch/$platform-plan"
   grep -q 'git' "$scratch/$platform-plan"
 done
 # Exercise actual setup control flow using isolated homes and fake installers.

@@ -30,14 +30,9 @@ class MockTests(unittest.TestCase):
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
 
-    def run_setup(self, platform, *, answer="", root=ROOT):
-        # Exercise setup with either platform on both CI hosts, without a public
-        # platform override. Bootstrap integration is tested separately.
+    def run_setup(self, platform, *options, answer="", root=ROOT):
         return subprocess.run(
-            ["bash", "-c", 'set -euo pipefail; setup_dir=$1; platform=$2; '
-             '. "$setup_dir/bootstrap.sh"; read_setup_config; '
-             'if ! "$dry_run"; then choose_setup_sudo; fi; '
-             '. "$setup_dir/scripts/setup.sh"; setup_main', "test", str(root), platform],
+            ["bash", str(root / "scripts/setup.sh"), platform, *options],
             env=self.env, input=answer, capture_output=True, text=True)
 
     def run_packages(self, function, packages):
@@ -167,7 +162,7 @@ elif args[0] not in ('update','install','upgrade'):
         script.write_text(script.read_text().replace('/opt/homebrew/bin/brew', str(self.base / 'absent-brew'))
                           .replace('/usr/local/bin/brew', str(self.base / 'absent-brew')))
         result = subprocess.run(["bash", "-c",
-                                'command() { if [ "$*" = "-v brew" ]; then return 1; fi; builtin command "$@"; }; export -f command; . "$1/bootstrap.sh"; read_setup_config; choose_setup_sudo; setup_dir=$1; platform=macos; . "$1/scripts/setup.sh"; setup_main',
+                                'command() { if [ "$*" = "-v brew" ]; then return 1; fi; builtin command "$@"; }; export -f command; . "$1/bootstrap.sh"; read_setup_config; choose_setup_sudo; setup_dir=$1; platform=macos; dry_run=false; . "$1/scripts/setup.sh"; setup_main',
                                 "test", str(checkout)], env=self.env, input="no\n", capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Warning: Homebrew", result.stderr)
@@ -272,7 +267,7 @@ class PrivilegeTests(MockTests):
         self.assertEqual(config.stat().st_mtime_ns, modified)
         self.assertEqual((ROOT / ".machine-setup.yml").read_bytes(), before)
 
-    def test_entrypoints_prompt_once_then_reuse_yaml_without_environment_override(self):
+    def test_entrypoints_prompt_once_then_reuse_yaml(self):
         home = self.ubuntu_mocks()
         self.mock("uname", "print('Darwin')\n")
         self.mock("xcode-select", "import sys\nsys.exit(0 if sys.argv[1:]==['-p'] else 98)\n")
@@ -280,14 +275,15 @@ class PrivilegeTests(MockTests):
         self.mock("brew", "pass\n")
         self.env["MACHINE_SETUP_DIR"] = str(self.base / "ignored")
         for entrypoint, answer in (("bootstrap.sh", "no\n"), ("scripts/setup.sh", "")):
-            result = subprocess.run(["bash", str(ROOT / entrypoint)], env=self.env,
+            result = subprocess.run(["bash", str(ROOT / entrypoint),
+                                     *(["macos"] if entrypoint == "scripts/setup.sh" else [])], env=self.env,
                                     input=answer, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(result.stderr.count("Do you have access to sudo?"), int(bool(answer)))
             self.assertIn("sudoEnabled: false", (home / ".machine-setup.yml").read_text())
         self.assertFalse((self.base / "ignored").exists())
 
-    def test_invalid_yaml_options_fail_without_prompt_or_mutation(self):
+    def test_unrelated_yaml_settings_are_preserved_and_do_not_configure_setup(self):
         home = self.ubuntu_mocks()
         config = home / ".machine-setup.yml"
         for settings in ("dryRun: maybe\n", "dryRun: true\ndryRun: false\n",
@@ -297,10 +293,10 @@ class PrivilegeTests(MockTests):
                 content = "sudoEnabled: false\n" + settings
                 config.write_text(content)
                 result = self.run_ubuntu()
-                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertNotIn("Do you have access", result.stderr)
                 self.assertEqual(config.read_text(), content)
-                self.assertFalse((home / ".config").exists())
+                self.assertTrue((home / ".config").exists())
 
     def test_yaml_changes_privileges_and_preserves_other_settings(self):
         home = self.ubuntu_mocks()
@@ -360,7 +356,7 @@ chmod +x "$MISE_INSTALL_PATH"
                 config.write_text(content)
                 result = self.run_ubuntu(answer="no\n")
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn("Invalid configuration", result.stderr)
+                self.assertIn("Invalid sudo configuration", result.stderr)
                 self.assertEqual(config.read_text(), content)
                 self.assertFalse((home / ".config").exists())
         config.unlink()
@@ -387,12 +383,12 @@ chmod +x "$MISE_INSTALL_PATH"
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("writable user-local mise", result.stderr)
 
-    def test_yaml_preview_does_not_prompt_or_write(self):
+    def test_cli_preview_does_not_prompt_or_write(self):
         home = self.ubuntu_mocks()
         config = home / ".machine-setup.yml"
-        config.write_text("sudoEnabled: false\ndryRun: true\n")
+        config.write_text("sudoEnabled: null\n")
         before = config.read_bytes()
-        result = self.run_ubuntu()
+        result = self.run_setup("ubuntu", "--dry-run")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("Do you have access", result.stderr)
         self.assertEqual(config.read_bytes(), before)

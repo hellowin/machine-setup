@@ -130,6 +130,19 @@ setup_main() {
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
-  setup_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-  exec bash "$setup_root/bootstrap.sh" "$@"
+  setup_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+  platform=${1:?Expected ubuntu or macos}
+  dry_run=false
+  shift
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --dry-run) dry_run=true ;;
+      *) printf 'Unknown setup argument: %s\n' "$1" >&2; exit 2 ;;
+    esac
+    shift
+  done
+  case "$platform" in ubuntu|macos) ;; *) echo 'Unsupported platform.' >&2; exit 2 ;; esac
+  . "$setup_dir/bootstrap.sh"
+  if ! "$dry_run"; then choose_setup_sudo; fi
+  setup_main
 fi

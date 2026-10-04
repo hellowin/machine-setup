@@ -10,51 +10,30 @@ read_setup_config() {
     printf 'Expected a regular file at %s.\n' "$setup_config" >&2
     return 1
   fi
-  repo=''
-  ref=main
-  dry_run=false
-  checkout_dir=$HOME/.local/share/machine-setup
   if [ -f "$setup_config" ]; then
-    # Read supported top-level YAML scalars without bootstrap dependencies.
-    config_values=$(awk '
-      /^(sudoEnabled|dryRun|repository|ref|setupDir):/ {
-        key=$0; sub(/:.*/, "", key)
-        if (++seen[key] > 1) exit 1
-        value=$0; sub(/^[^:]+:[[:space:]]*/, "", value)
-        sub(/[[:space:]]+#.*$/, "", value); sub(/[[:space:]]*$/, "", value)
-        quote=substr(value, 1, 1)
-        if (quote == "\047" || quote == "\042") {
-          if (substr(value, length(value), 1) != quote) exit 1
-          value=substr(value, 2, length(value)-2)
-        }
-        if (key == "sudoEnabled" && value != "true" && value != "false" && value != "null") exit 1
-        if (key == "dryRun" && value != "true" && value != "false") exit 1
-        if ((key == "ref" || key == "setupDir" || key == "repository") && value == "") exit 1
-        print key ":" value
+    saved_sudo=$(awk '
+      /^[[:space:]]*(#.*)?$/ { next }
+      /^sudoEnabled:/ {
+        count++; value=$0
+        sub(/^sudoEnabled:[[:space:]]*/, "", value)
+        sub(/[[:space:]]+#.*$/, "", value)
+        sub(/[[:space:]]*$/, "", value)
+        if (value != "true" && value != "false" && value != "null") bad=1
+      }
+      END {
+        if (count > 1 || bad) exit 1
+        if (count == 1 && value != "null") print value
       }
     ' "$setup_config") || {
-      printf 'Invalid configuration in %s; sudoEnabled must be true or false, dryRun must be true or false, and scalar keys must be unique.\n' "$setup_config" >&2
+      printf 'Invalid sudo configuration in %s; use sudoEnabled: true or false.\n' "$setup_config" >&2
       return 1
     }
-    while IFS= read -r setting; do
-      case "$setting" in
-        sudoEnabled:*) saved_sudo=${setting#*:} ;;
-        dryRun:*) dry_run=${setting#*:} ;;
-        repository:*) repo=${setting#*:} ;;
-        ref:*) ref=${setting#*:} ;;
-        setupDir:*) checkout_dir=${setting#*:} ;;
-      esac
-    done <<EOF
-$config_values
-EOF
   fi
-  case "$repo" in ''|https://*) ;; *) echo 'YAML repository must be an HTTPS Git URL.' >&2; return 1 ;; esac
-  case "$ref" in -*) echo 'YAML ref must not start with a dash.' >&2; return 1 ;; esac
-  case "$checkout_dir" in /*) ;; *) echo 'YAML setupDir must be an absolute path.' >&2; return 1 ;; esac
 }
 
 choose_setup_sudo() {
   local answer
+  read_setup_config
   sudo_enabled=$saved_sudo
   if [ -f "$setup_config" ]; then
     case "$sudo_enabled" in true|false) ;; *)
@@ -98,12 +77,30 @@ save_setup_config() {
   mv "$temporary" "$setup_config"
 }
 
+usage() {
+  cat <<'HELP'
+Usage: bash bootstrap.sh [--dry-run] [--repo HTTPS_URL] [--ref REF]
+Local:  bash bootstrap.sh --dry-run
+Remote: bash -c "$(curl -fsSL https://raw.githubusercontent.com/hellowin/machine-setup/main/bootstrap.sh)"
+Environment: MACHINE_SETUP_DIR overrides the remote checkout destination.
+HELP
+}
+
 bootstrap_main() {
-  if [ "$#" -ne 0 ]; then
-    echo 'CLI arguments are not supported. Configure setup in ~/.machine-setup.yml.' >&2
-    exit 2
-  fi
-  read_setup_config
+  repo=''
+  ref=main
+  dry_run=false
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --dry-run) dry_run=true; shift ;;
+      --repo|--ref)
+        [ "$#" -ge 2 ] || { usage >&2; exit 2; }
+        if [ "$1" = --repo ]; then repo=$2; else ref=$2; fi
+        shift 2 ;;
+      -h|--help) usage; exit 0 ;;
+      *) printf 'Unknown argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;
+    esac
+  done
 
   # A downloaded or piped entrypoint uses the public repository automatically.
   # A script inside a checkout applies that checkout's current files.
@@ -134,7 +131,8 @@ bootstrap_main() {
   if ! "$dry_run"; then choose_setup_sudo; fi
 
   if [ -n "$repo" ]; then
-    setup_dir=$checkout_dir
+    case "$repo" in https://*) ;; *) echo '--repo must be an HTTPS Git URL.' >&2; exit 2 ;; esac
+    setup_dir=${MACHINE_SETUP_DIR:-"$HOME/.local/share/machine-setup"}
     if "$dry_run"; then
       printf 'Would check %s prerequisites, clone/update %s at %s into %s, then apply setup.\n' "$platform" "$repo" "$ref" "$setup_dir"
       exit 0

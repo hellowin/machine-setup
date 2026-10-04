@@ -15,7 +15,7 @@ access to sudo only when `~/.machine-setup.yml` does not exist, and saves your
 answer there. Reruns read the YAML file without prompting. Change
 `sudoEnabled` to `true` or `false` in that file to change the choice. An existing
 file with a missing, null, or invalid sudo setting must be corrected before setup.
-Setup accepts no CLI arguments.
+Only the sudo choice is configured through YAML.
 
 Ubuntu/WSL uses sudo for apt operations only when enabled. Without sudo, setup
 prints package commands for you or an administrator to run and continues with
@@ -61,23 +61,18 @@ personal/work account login are configured separately.
 
 ## Preview and develop
 
-Set `dryRun: true` in `~/.machine-setup.yml` to preview without applying setup.
-For a new machine, create the file with `sudoEnabled: true` or `false` and
-`dryRun: true` before running the install command. Set `dryRun: false` to apply.
-
 ```bash
-bash bootstrap.sh    # Read YAML; ask about sudo only if the file is absent
-bash tests/check.sh  # Run checks without installing packages
+bash bootstrap.sh --dry-run  # Preview your local checkout
+bash bootstrap.sh           # Ask about sudo on first run, then apply
+bash tests/check.sh         # Run checks without installing packages
 ```
 
-Optional YAML keys `repository` (HTTPS Git URL), `ref` (branch or tag), and
-`setupDir` (absolute checkout path) configure the remote checkout. Without a
-repository setting, a local bootstrap applies its own checkout; the downloaded
-entrypoint uses the public repository on `main`. The default destination is
-`~/.local/share/machine-setup`. Environment variables do not override these
-settings. For a release, replace `main` in the download URL with its tag and set
-`ref` to that tag in YAML. Use `latest` in mise configuration to follow its latest
-channel, or retain ranges/pins to limit updates.
+To preview on a new machine, add `-- --dry-run` to the install command.
+Use `--repo HTTPS_URL` to select a remote repository and `MACHINE_SETUP_DIR`
+to override the remote checkout destination. For a release, replace `main` in
+the download URL with its tag and add `-- --ref TAG` to the command.
+Use `latest` in mise configuration to follow its latest channel, or retain
+ranges/pins to limit updates.
 
 CI checks Ubuntu and macOS syntax, previews, safe reruns, update behavior, config
 preservation, and whitespace with fake installers. Full clean-machine

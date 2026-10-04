@@ -21,6 +21,24 @@ class MockTests(unittest.TestCase):
         self.log = self.base / "calls.jsonl"
         self.env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}",
                         HOME=str(self.base / "home"), MOCK_LOG=str(self.log))
+        self.env.pop("ZDOTDIR", None)
+        self.omz_mocks()
+
+    def omz_mocks(self):
+        self.mock("zsh", "pass\n")
+        self.mock("git", """import sys
+from pathlib import Path
+args=sys.argv[1:]
+if args[0]=='clone':
+    target=Path(args[-1])
+    (target/'.git').mkdir(parents=True)
+    (target/'oh-my-zsh.sh').touch()
+elif args[0]=='-C':
+    if args[2]=='remote': print('https://github.com/ohmyzsh/ohmyzsh.git')
+    elif args[2]=='symbolic-ref': print('master')
+    elif args[2] not in ('status','fetch','merge-base','merge'): sys.exit(97)
+else: sys.exit(97)
+""")
 
     def mock(self, name, code):
         path = self.bin / name
@@ -115,8 +133,7 @@ else:
         home = self.base / "home"
         home.mkdir()
         self.env["XDG_CONFIG_HOME"] = str(home / ".config")
-        for name in ("sudo", "git"):
-            self.mock(name, "import sys\nprint('Unexpected privileged/system mutation', file=sys.stderr)\nsys.exit(97)\n")
+        self.mock("sudo", "import sys\nprint('Unexpected privileged/system mutation', file=sys.stderr)\nsys.exit(97)\n")
         self.mock("ruby", "import sys\nsys.stdin.read()\nprint('install')\n")
         self.mock("brew", """import os,sys,json
 args=sys.argv[1:]
@@ -200,7 +217,8 @@ chmod +x "$MISE_INSTALL_PATH"
         self.assertEqual(self.calls(), [
             ["update"], ["info", "--json=v2", "--formula", "git"],
             ["install", "--formula", "git"], ["info", "--json=v2", "--formula", "curl"],
-            ["install", "--formula", "curl"]])
+            ["install", "--formula", "curl"], ["info", "--json=v2", "--formula", "zsh"],
+            ["install", "--formula", "zsh"]])
         self.assertTrue((home / ".local/bin/mise").is_file())
         self.assertFalse((self.base / "must-not-write").exists())
         self.assertIn(str(home / ".local/bin/mise"), (home / ".zshrc").read_text())

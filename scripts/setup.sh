@@ -2,22 +2,37 @@
 set -euo pipefail
 setup_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 platform=${1:?Expected ubuntu or macos}
-dry_run=${2:-}
+dry_run=''
+sudo_override=''
+shift
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --dry-run) dry_run=--dry-run ;;
+    --sudo) sudo_override=true ;;
+    --no-sudo) sudo_override=false ;;
+    *) printf 'Unknown setup argument: %s\n' "$1" >&2; exit 2 ;;
+  esac
+  shift
+done
+. "$setup_dir/bootstrap.sh"
 case "$platform" in ubuntu|macos) ;; *) echo 'Unsupported platform.' >&2; exit 2 ;; esac
 
 if [ "$dry_run" = --dry-run ]; then
   printf 'Platform: %s\n' "$platform"
   if [ "$platform" = macos ]; then
-    printf 'Would require existing Command Line Tools and Homebrew, then update these formulae without sudo:\n'
+    printf 'Would require existing Command Line Tools and Homebrew, then update these formulae:\n'
   else
-    printf 'Would update apt packages using sudo:\n'
+    printf 'Would update apt packages when sudo is enabled; otherwise show manual instructions:\n'
   fi
   cat "$setup_dir/config/packages.$platform.txt"
+  printf '\nWould read ~/.machine-setup.yml, ask about sudo if unset, and persist the choice.\n'
   printf '\nWould install mise, link config/tools.toml into ~/.config/mise/conf.d,\nupgrade configured tools using mise, and add mise activation to .bashrc and .zshrc.\n'
   exit 0
 fi
 
-# Preflight the only managed file before installing packages.
+choose_setup_sudo
+
+# Preflight managed configuration before installing packages.
 config_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}/mise/conf.d
 config_target=$config_dir/machine-setup.toml
 if [ -e "$config_target" ] || [ -L "$config_target" ]; then
@@ -36,12 +51,24 @@ while IFS= read -r package || [ -n "$package" ]; do
 done < "$setup_dir/config/packages.$platform.txt"
 
 if [ "$platform" = ubuntu ]; then
-  sudo apt-get update
-  upgrade_apt_packages "${packages[@]}"
+  if [ "$sudo_enabled" = true ]; then
+    sudo apt-get update
+    upgrade_apt_packages "${packages[@]}"
+  else
+    printf 'Skipping apt updates and installs because sudo is disabled. Run yourself or ask an administrator:\n  sudo apt-get update\n  sudo apt-get install -y --no-remove'
+    printf ' %s' "${packages[@]}"
+    printf '\n'
+    for tool in git curl; do
+      command -v "$tool" >/dev/null 2>&1 || {
+        printf 'Missing required tool: %s. Install it manually, then rerun.\n' "$tool" >&2
+        exit 1
+      }
+    done
+  fi
 else
   # IT provisions Command Line Tools and Homebrew; never run their installers.
   if ! xcode-select -p >/dev/null 2>&1; then
-    echo 'macOS requires existing Command Line Tools. Ask IT to provision them, then rerun; setup never installs them or uses sudo.' >&2
+    echo 'macOS requires existing Command Line Tools. Install them manually (xcode-select --install) or ask IT to provision them, then rerun.' >&2
     exit 1
   fi
   # Homebrew's standard paths cover Apple Silicon and Intel Macs.
@@ -53,7 +80,7 @@ else
     fi
   fi
   if ! command -v brew >/dev/null 2>&1; then
-    echo 'Warning: Homebrew is not installed or available. Install Homebrew manually through Corporate IT/managed software center, then rerun setup. Setup never installs Homebrew or uses sudo on macOS.' >&2
+    echo 'Warning: Homebrew is not installed or available. Install Homebrew manually through Corporate IT/managed software center, then rerun setup. Setup never runs the Homebrew installer.' >&2
     exit 1
   fi
   brew update
@@ -61,17 +88,19 @@ else
 fi
 
 # A user-local symlink could still target an IT-managed binary.
-if [ "$platform" = macos ]; then
+if [ "$platform" = macos ] || [ "$sudo_enabled" = false ]; then
   local_mise=$HOME/.local/bin/mise
   if [ -L "$local_mise" ] || { [ -e "$local_mise" ] && { [ ! -w "$local_mise" ] || [ ! -w "$HOME/.local/bin" ]; }; }; then
-    printf 'Move linked or non-writable %s aside; macOS requires a writable user-local mise binary.\n' "$local_mise" >&2
+    printf 'Move linked or non-writable %s aside; setup requires a writable user-local mise binary.\n' "$local_mise" >&2
     exit 1
   fi
 fi
 
+save_setup_config
+
 if [ -x "$HOME/.local/bin/mise" ]; then
   mise_bin=$HOME/.local/bin/mise
-elif [ "$platform" = ubuntu ] && command -v mise >/dev/null 2>&1; then
+elif [ "$platform" = ubuntu ] && [ "$sudo_enabled" = true ] && command -v mise >/dev/null 2>&1; then
   mise_bin=$(command -v mise)
 else
   installer=$(mktemp)

@@ -11,7 +11,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class UpdateTests(unittest.TestCase):
+class MockTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -32,10 +32,12 @@ class UpdateTests(unittest.TestCase):
 
     def run_packages(self, function, packages):
         return subprocess.run(
-            ["bash", "-c", 'set -euo pipefail; setup_dir=$1; . "$1/scripts/packages.sh"; shift; "$@"',
+            ["bash", "-c", 'set -euo pipefail; sudo_enabled=true; setup_dir=$1; . "$1/scripts/packages.sh"; shift; "$@"',
              "test", str(ROOT), function, *packages], env=self.env,
             capture_output=True, text=True)
 
+
+class UpdateTests(MockTests):
     @unittest.skipUnless(shutil.which("dpkg"), "Native apt version comparison runs on Ubuntu")
     def test_apt_only_installs_missing_or_older_and_honors_holds(self):
         self.mock("apt-mark", "print('held')\n")
@@ -126,21 +128,21 @@ elif args[0] not in ('update','install','upgrade'):
 
     def run_macos(self):
         return subprocess.run(["bash", str(ROOT / "scripts/setup.sh"), "macos"],
-                              env=self.env, capture_output=True, text=True)
+                              env=self.env, input="no\n", capture_output=True, text=True)
 
     def test_macos_missing_clt_stops_without_installers_or_writes(self):
         home = self.macos_mocks()
         self.mock("xcode-select", "import sys\nsys.exit(1)\n")
         result = self.run_macos()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Ask IT", result.stderr)
+        self.assertIn("ask IT", result.stderr)
         self.assertEqual(list(home.iterdir()), [])
         # The downloaded bootstrap must also stop before invoking Git/CLT install.
         self.mock("uname", "print('Darwin')\n")
         result = subprocess.run(["bash", "-c", (ROOT / "bootstrap.sh").read_text()],
-                                env=self.env, capture_output=True, text=True)
+                                env=self.env, input="no\n", capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Ask IT", result.stderr)
+        self.assertIn("ask IT", result.stderr)
         self.assertEqual(list(home.iterdir()), [])
 
     def test_macos_missing_brew_warns_without_installing_or_writing(self):
@@ -149,12 +151,14 @@ elif args[0] not in ('update','install','upgrade'):
         checkout = self.base / "checkout"
         shutil.copytree(ROOT / "scripts", checkout / "scripts")
         shutil.copytree(ROOT / "config", checkout / "config")
+        shutil.copyfile(ROOT / "bootstrap.sh", checkout / "bootstrap.sh")
+        shutil.copyfile(ROOT / ".machine-setup.yml", checkout / ".machine-setup.yml")
         # Hide host Homebrew on macOS CI, including standard-prefix discovery.
         script = checkout / "scripts/setup.sh"
         script.write_text(script.read_text().replace('/opt/homebrew/bin/brew', str(self.base / 'absent-brew'))
                           .replace('/usr/local/bin/brew', str(self.base / 'absent-brew')))
         result = subprocess.run(["bash", "-c",
-                                'command() { if [ "$*" = "-v brew" ]; then return 1; fi; builtin command "$@"; }; export -f command; bash "$1" macos',
+                                'command() { if [ "$*" = "-v brew" ]; then return 1; fi; builtin command "$@"; }; export -f command; bash "$1" macos --no-sudo',
                                 "test", str(script)], env=self.env, capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Warning: Homebrew", result.stderr)
@@ -214,7 +218,7 @@ with open(os.environ['MOCK_LOG'],'a') as f: f.write(json.dumps(sys.argv[1:])+'\\
         self.env["XDG_CONFIG_HOME"] = str(home / ".config")
         before = (ROOT / "config/tools.toml").read_bytes()
         for _ in range(2):
-            result = subprocess.run(["bash", str(ROOT / "scripts/setup.sh"), "ubuntu"],
+            result = subprocess.run(["bash", str(ROOT / "scripts/setup.sh"), "ubuntu", "--sudo"],
                                     env=self.env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.calls()
@@ -224,6 +228,147 @@ with open(os.environ['MOCK_LOG'],'a') as f: f.write(json.dumps(sys.argv[1:])+'\\
         self.assertEqual((ROOT / "config/tools.toml").read_bytes(), before)
         self.assertEqual((home / ".bashrc").read_text().count("activate bash"), 1)
         self.assertEqual((home / ".zshrc").read_text().count("activate zsh"), 1)
+
+
+class PrivilegeTests(MockTests):
+    def ubuntu_mocks(self):
+        home = self.base / "home"
+        (home / ".local/bin").mkdir(parents=True)
+        self.env["XDG_CONFIG_HOME"] = str(home / ".config")
+        for name in ("sudo", "apt-get", "apt-cache", "apt-mark", "mise", "curl"):
+            self.mock(name, "import sys\nprint('Unexpected system command', file=sys.stderr)\nsys.exit(97)\n")
+        # curl and git are available, but no downloads should be needed here.
+        mise = home / ".local/bin/mise"
+        mise.write_text("#!/bin/sh\ncase \"$1\" in self-update|trust|install|upgrade|--version|ls) exit 0 ;; *) exit 98 ;; esac\n")
+        mise.chmod(0o755)
+        return home
+
+    def run_ubuntu(self, *options, answer=""):
+        return subprocess.run(["bash", str(ROOT / "scripts/setup.sh"), "ubuntu", *options],
+                              env=self.env, input=answer, capture_output=True, text=True)
+
+    def test_ubuntu_no_sudo_prompts_persists_and_reuses_choice(self):
+        home = self.ubuntu_mocks()
+        before = (ROOT / ".machine-setup.yml").read_bytes()
+        result = self.run_ubuntu(answer="maybe\nno\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Please answer yes or no", result.stderr)
+        self.assertIn("Skipping apt", result.stdout)
+        self.assertIn("sudo apt-get install", result.stdout)
+        config = home / ".machine-setup.yml"
+        self.assertIn("enabled: false", config.read_text())
+        modified = config.stat().st_mtime_ns
+        result = self.run_ubuntu()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("Do you have access", result.stderr)
+        self.assertEqual(config.stat().st_mtime_ns, modified)
+        self.assertEqual((ROOT / ".machine-setup.yml").read_bytes(), before)
+
+    def test_override_preserves_other_yaml_settings(self):
+        home = self.ubuntu_mocks()
+        config = home / ".machine-setup.yml"
+        config.write_text("# My settings\nsudo:\n  enabled: true\n  extra: keep\neditor:\n  name: vim\n")
+        result = self.run_ubuntu("--no-sudo")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(config.read_text(), "# My settings\nsudo:\n  enabled: false\n  extra: keep\neditor:\n  name: vim\n")
+        self.mock("sudo", "import os,sys,json\nwith open(os.environ['MOCK_LOG'],'a') as f: f.write(json.dumps(sys.argv[1:])+'\\n')\n")
+        self.mock("apt-mark", "pass\n")
+        self.mock("apt-cache", "print('Installed: (none)\\nCandidate: 1.0')\n")
+        result = self.run_ubuntu("--sudo")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("enabled: true", config.read_text())
+        self.assertEqual(self.calls()[0], ["apt-get", "update"])
+
+    def test_no_sudo_installs_local_mise_instead_of_using_system_copy(self):
+        home = self.ubuntu_mocks()
+        (home / ".local/bin/mise").unlink()
+        installer = self.base / "installer.sh"
+        installer.write_text("""#!/bin/sh
+set -eu
+[ "$MISE_INSTALL_PATH" = "$HOME/.local/bin/mise" ]
+mkdir -p "$HOME/.local/bin"
+cat > "$MISE_INSTALL_PATH" <<'MOCK'
+#!/bin/sh
+case "$1" in self-update|trust|install|upgrade|--version|ls) exit 0 ;; *) exit 1 ;; esac
+MOCK
+chmod +x "$MISE_INSTALL_PATH"
+""")
+        self.mock("curl", f"import sys,shutil\nshutil.copyfile({str(installer)!r}, sys.argv[sys.argv.index('-o')+1])\n")
+        result = self.run_ubuntu("--no-sudo")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((home / ".local/bin/mise").is_file())
+
+    def test_yaml_without_sudo_block_is_extended_and_null_asks_again(self):
+        home = self.ubuntu_mocks()
+        config = home / ".machine-setup.yml"
+        config.write_text("editor: vim\n")
+        result = self.run_ubuntu("--no-sudo")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(config.read_text(), "editor: vim\n\nsudo:\n  enabled: false\n")
+        config.write_text("sudo: # User preference\n  enabled: null # Ask again\n")
+        result = self.run_ubuntu(answer="no\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Do you have access", result.stderr)
+        self.assertEqual(config.read_text(), "sudo: # User preference\n  enabled: false # Ask again\n")
+
+    def test_invalid_or_linked_yaml_fails_before_installation(self):
+        home = self.ubuntu_mocks()
+        config = home / ".machine-setup.yml"
+        for content in ("sudo:\n  enabled: maybe\n", "sudo: false\n",
+                        "sudo:\n  enabled: false\n  enabled: true\n",
+                        "sudo:\n  enabled: true\nsudo:\n  enabled: false\n"):
+            with self.subTest(content=content):
+                config.write_text(content)
+                result = self.run_ubuntu("--no-sudo")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Invalid sudo configuration", result.stderr)
+                self.assertEqual(config.read_text(), content)
+                self.assertFalse((home / ".config").exists())
+        config.unlink()
+        target = self.base / "external.yml"
+        target.write_text("sudo:\n  enabled: false\n")
+        config.symlink_to(target)
+        result = self.run_ubuntu("--no-sudo")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("regular file", result.stderr)
+
+    def test_unanswered_prompt_stops_without_defaulting_to_sudo(self):
+        home = self.ubuntu_mocks()
+        result = self.run_ubuntu()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--no-sudo", result.stderr)
+        self.assertFalse((home / ".machine-setup.yml").exists())
+
+    def test_no_sudo_rejects_system_mise_symlink(self):
+        home = self.ubuntu_mocks()
+        local = home / ".local/bin/mise"
+        local.unlink()
+        local.symlink_to(self.bin / "mise")
+        result = self.run_ubuntu("--no-sudo")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("writable user-local mise", result.stderr)
+
+    def test_preview_does_not_prompt_or_write_even_with_override(self):
+        home = self.ubuntu_mocks()
+        result = self.run_ubuntu("--dry-run", "--sudo")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("Do you have access", result.stderr)
+        self.assertFalse((home / ".machine-setup.yml").exists())
+
+    @unittest.skipUnless(Path("/etc/os-release").exists() and
+                         "ID=ubuntu" in Path("/etc/os-release").read_text(),
+                         "Ubuntu remote bootstrap prerequisite")
+    def test_downloaded_bootstrap_without_git_and_sudo_gives_manual_instruction(self):
+        home = self.ubuntu_mocks()
+        # Hide even a host Git without changing PATH's other required commands.
+        prefix = 'command() { if [ "$*" = "-v git" ]; then return 1; fi; builtin command "$@"; }; '
+        result = subprocess.run(["bash", "-c", prefix + (ROOT / "bootstrap.sh").read_text(),
+                                 "test", "--no-sudo"], env=self.env,
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Git is required", result.stderr)
+        self.assertIn("administrator", result.stderr)
+        self.assertFalse((home / ".local/share").exists())
 
 
 if __name__ == "__main__":

@@ -78,9 +78,11 @@ case "${1:-}" in trust|install|upgrade|self-update|--version|ls) exit 0 ;; *) ex
 MOCK
   chmod +x "$test_home/.local/bin/mise"
   printf '# Existing shell configuration\n' > "$test_home/.bashrc"
+  sudo_option=--no-sudo
+  if [ "$platform" = ubuntu ]; then sudo_option=--sudo; fi
   for iteration in 1 2; do
     MOCK_PLATFORM="$platform" HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" PATH="$scratch/bin:$PATH" \
-      bash scripts/setup.sh "$platform" > "$scratch/$platform-apply"
+      bash scripts/setup.sh "$platform" "$sudo_option" > "$scratch/$platform-apply"
   done
   [ "$(grep -c 'activate bash' "$test_home/.bashrc")" -eq 1 ]
   [ "$(grep -c 'activate zsh' "$test_home/.zshrc")" -eq 1 ]
@@ -89,7 +91,7 @@ MOCK
   rm "$test_home/.config/mise/conf.d/machine-setup.toml"
   printf 'existing config\n' > "$test_home/.config/mise/conf.d/machine-setup.toml"
   if MOCK_PLATFORM="$platform" HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" PATH="$scratch/bin:$PATH" \
-    bash scripts/setup.sh "$platform" > /dev/null 2>&1; then
+    bash scripts/setup.sh "$platform" "$sudo_option" > /dev/null 2>&1; then
     echo 'Conflicting config unexpectedly overwritten.' >&2; exit 1
   fi
   grep -qx 'existing config' "$test_home/.config/mise/conf.d/machine-setup.toml"

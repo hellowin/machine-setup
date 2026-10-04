@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Sourced by setup.sh; callers refresh the package manager once per run.
 upgrade_apt_packages() {
+  if [ "${sudo_enabled:-false}" = false ]; then
+    echo 'Apt updates require sudo; install packages manually or ask an administrator.' >&2
+    return 1
+  fi
   local package policy installed candidate held
   held=$(apt-mark showhold)
   for package in "$@"; do

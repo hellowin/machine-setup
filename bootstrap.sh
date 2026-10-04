@@ -13,22 +13,19 @@ read_setup_config() {
   if [ -f "$setup_config" ]; then
     saved_sudo=$(awk '
       /^[[:space:]]*(#.*)?$/ { next }
-      /^sudo:[[:space:]]*(#.*)?$/ { sections++; inside=1; next }
-      /^[^[:space:]]/ { inside=0 }
-      inside && /^[[:space:]]+enabled:/ {
+      /^sudoEnabled:/ {
         count++; value=$0
-        sub(/^[[:space:]]+enabled:[[:space:]]*/, "", value)
+        sub(/^sudoEnabled:[[:space:]]*/, "", value)
         sub(/[[:space:]]+#.*$/, "", value)
         sub(/[[:space:]]*$/, "", value)
         if (value != "true" && value != "false" && value != "null") bad=1
       }
-      /^sudo:/ && !inside { bad=1 }
       END {
-        if (sections > 1 || count > 1 || bad || (sections == 1 && count != 1)) exit 1
+        if (count > 1 || bad) exit 1
         if (count == 1 && value != "null") print value
       }
     ' "$setup_config") || {
-      printf 'Invalid sudo configuration in %s; use sudo: with an indented enabled: true, false, or null.\n' "$setup_config" >&2
+      printf 'Invalid sudo configuration in %s; use sudoEnabled: true, false, or null.\n' "$setup_config" >&2
       return 1
     }
   fi
@@ -62,13 +59,12 @@ save_setup_config() {
   if [ ! -f "$source_config" ]; then source_config=$setup_dir/.machine-setup.yml; fi
   temporary=$(mktemp "$HOME/.machine-setup.yml.XXXXXX")
   if ! awk -v enabled="$sudo_enabled" '
-    /^sudo:[[:space:]]*(#.*)?$/ { inside=1; found=1; print; next }
-    /^[^[:space:]]/ { inside=0 }
-    inside && /^[[:space:]]+enabled:/ {
-      sub(/enabled:[[:space:]]*[^[:space:]#]+/, "enabled: " enabled); print; next
+    /^sudoEnabled:/ {
+      found=1
+      sub(/sudoEnabled:[[:space:]]*[^[:space:]#]+/, "sudoEnabled: " enabled); print; next
     }
     { print }
-    END { if (!found) print "\nsudo:\n  enabled: " enabled }
+    END { if (!found) print "\nsudoEnabled: " enabled }
   ' "$source_config" > "$temporary"; then
     rm -f "$temporary"
     return 1

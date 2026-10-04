@@ -13,7 +13,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/hellowin/machine-setup/m
 Run as your normal user, then open a new terminal. Setup first asks whether you
 have access to sudo, on either OS, and saves the answer in
 `~/.machine-setup.yml`. Reruns reuse that choice. Use `-- --sudo` or
-`-- --no-sudo` on the install command to change it, or edit `sudo.enabled` in the
+`-- --no-sudo` on the install command to change it, or edit `sudoEnabled` in the
 YAML file (`true`, `false`, or `null` to ask again).
 
 Ubuntu/WSL uses sudo for apt operations only when enabled. Without sudo, setup

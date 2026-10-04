@@ -1,4 +1,3 @@
 # Copied to ~/.machine-setup.yml on installation; host choices stay on the host.
 # null asks on first run; true enables sudo, false skips privileged operations.
-sudo:
-  enabled: null
+sudoEnabled: null

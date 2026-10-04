@@ -256,7 +256,7 @@ class PrivilegeTests(MockTests):
         self.assertIn("Skipping apt", result.stdout)
         self.assertIn("sudo apt-get install", result.stdout)
         config = home / ".machine-setup.yml"
-        self.assertIn("enabled: false", config.read_text())
+        self.assertIn("sudoEnabled: false", config.read_text())
         modified = config.stat().st_mtime_ns
         result = self.run_ubuntu()
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -267,16 +267,16 @@ class PrivilegeTests(MockTests):
     def test_override_preserves_other_yaml_settings(self):
         home = self.ubuntu_mocks()
         config = home / ".machine-setup.yml"
-        config.write_text("# My settings\nsudo:\n  enabled: true\n  extra: keep\neditor:\n  name: vim\n")
+        config.write_text("# My settings\nsudoEnabled: true\nextra: keep\neditor:\n  name: vim\n")
         result = self.run_ubuntu("--no-sudo")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(config.read_text(), "# My settings\nsudo:\n  enabled: false\n  extra: keep\neditor:\n  name: vim\n")
+        self.assertEqual(config.read_text(), "# My settings\nsudoEnabled: false\nextra: keep\neditor:\n  name: vim\n")
         self.mock("sudo", "import os,sys,json\nwith open(os.environ['MOCK_LOG'],'a') as f: f.write(json.dumps(sys.argv[1:])+'\\n')\n")
         self.mock("apt-mark", "pass\n")
         self.mock("apt-cache", "print('Installed: (none)\\nCandidate: 1.0')\n")
         result = self.run_ubuntu("--sudo")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("enabled: true", config.read_text())
+        self.assertIn("sudoEnabled: true", config.read_text())
         self.assertEqual(self.calls()[0], ["apt-get", "update"])
 
     def test_no_sudo_installs_local_mise_instead_of_using_system_copy(self):
@@ -298,25 +298,25 @@ chmod +x "$MISE_INSTALL_PATH"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue((home / ".local/bin/mise").is_file())
 
-    def test_yaml_without_sudo_block_is_extended_and_null_asks_again(self):
+    def test_yaml_without_sudo_key_is_extended_and_null_asks_again(self):
         home = self.ubuntu_mocks()
         config = home / ".machine-setup.yml"
         config.write_text("editor: vim\n")
         result = self.run_ubuntu("--no-sudo")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(config.read_text(), "editor: vim\n\nsudo:\n  enabled: false\n")
-        config.write_text("sudo: # User preference\n  enabled: null # Ask again\n")
+        self.assertEqual(config.read_text(), "editor: vim\n\nsudoEnabled: false\n")
+        config.write_text("sudoEnabled: null # User preference\n")
         result = self.run_ubuntu(answer="no\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Do you have access", result.stderr)
-        self.assertEqual(config.read_text(), "sudo: # User preference\n  enabled: false # Ask again\n")
+        self.assertEqual(config.read_text(), "sudoEnabled: false # User preference\n")
 
     def test_invalid_or_linked_yaml_fails_before_installation(self):
         home = self.ubuntu_mocks()
         config = home / ".machine-setup.yml"
-        for content in ("sudo:\n  enabled: maybe\n", "sudo: false\n",
-                        "sudo:\n  enabled: false\n  enabled: true\n",
-                        "sudo:\n  enabled: true\nsudo:\n  enabled: false\n"):
+        for content in ("sudoEnabled: maybe\n", "sudoEnabled:\n",
+                        "sudoEnabled:\n  value: true\n",
+                        "sudoEnabled: true\nsudoEnabled: false\n"):
             with self.subTest(content=content):
                 config.write_text(content)
                 result = self.run_ubuntu("--no-sudo")
@@ -326,7 +326,7 @@ chmod +x "$MISE_INSTALL_PATH"
                 self.assertFalse((home / ".config").exists())
         config.unlink()
         target = self.base / "external.yml"
-        target.write_text("sudo:\n  enabled: false\n")
+        target.write_text("sudoEnabled: false\n")
         config.symlink_to(target)
         result = self.run_ubuntu("--no-sudo")
         self.assertNotEqual(result.returncode, 0)

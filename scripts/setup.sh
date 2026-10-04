@@ -12,7 +12,7 @@ setup_main() {
     cat "$setup_dir/config/packages.$platform.txt"
     printf '\nWould read ~/.machine-setup.yml, ask about sudo only if the file is absent, and save the initial choice.\n'
     printf '\nWould install mise, link config/tools.toml into ~/.config/mise/conf.d,\nupgrade configured tools using mise, and add mise activation to .bashrc and .zshrc.\n'
-    printf '\nWould install or fast-forward update Oh My Zsh in ~/.oh-my-zsh and enable robbyrussell with git/z plugins.\nExisting Oh My Zsh configuration and its updater would be preserved; the login shell would not change.\n'
+    printf '\nWould install or fast-forward update Oh My Zsh in ~/.oh-my-zsh.\nExisting Oh My Zsh configuration and its updater would be preserved; the login shell would not change.\n'
     return 0
   fi
 

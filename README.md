@@ -10,13 +10,22 @@ Run in your Ubuntu or Mac terminal:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/hellowin/machine-setup/main/bootstrap.sh)"
 ```
 
-Run as your normal user, then open a new terminal. Ubuntu/WSL asks for your sudo
-password for apt operations. macOS never uses sudo: Corporate IT must provide
-Command Line Tools and install Homebrew through the managed software center.
-Setup warns and stops if Homebrew is missing; install it manually through IT,
-then rerun. With Homebrew available, setup installs/updates the declared formulae
-as your normal user. It never runs the Homebrew or Command Line Tools installers.
-If Ubuntu has no curl, install it first: `sudo apt-get update && sudo apt-get install -y curl`.
+Run as your normal user, then open a new terminal. Setup asks whether you have
+access to sudo only when `~/.machine-setup.yml` does not exist, and saves your
+answer there. Reruns read the YAML file without prompting. Change
+`sudoEnabled` to `true` or `false` in that file to change the choice. An existing
+file with a missing, null, or invalid sudo setting must be corrected before setup.
+Only the sudo choice is configured through YAML.
+
+Ubuntu/WSL uses sudo for apt operations only when enabled. Without sudo, setup
+prints package commands for you or an administrator to run and continues with
+user-local mise and tools. Git and curl must already be available; build tools
+may still be needed for some mise runtimes. If a required tool is missing, install
+it manually and rerun. macOS requires existing Command Line Tools and Homebrew;
+install them yourself or through Corporate IT/managed software center, then rerun.
+Homebrew formula updates run as your normal user. Setup never runs the Homebrew
+or Command Line Tools installers. If curl is missing, install it manually or ask
+an administrator before running the download command.
 
 ## What's included
 
@@ -28,8 +37,8 @@ The checkout lives in `~/.local/share/machine-setup`. Rerun the install command 
 update and reapply setup; existing checkout changes must be committed or stashed.
 Declared apt/Homebrew packages upgrade when newer versions are available; equal,
 newer, held, and pinned installations are preserved. No blanket OS upgrade runs.
-macOS installs mise at `~/.local/bin/mise` and leaves any system/Homebrew mise
-untouched. Mise uses native `self-update`, `install`, and `upgrade` behavior. Ranges such as
+macOS and Ubuntu without sudo install mise at `~/.local/bin/mise` and leave
+any system/Homebrew mise untouched. Mise uses native `self-update`, `install`, and `upgrade` behavior. Ranges such as
 Node `26` track 26.x; exact pins stay pinned. Mise decides which runtime is active
 and how old versions are pruned; there is no custom mise version override.
 Existing shell settings are preserved, and conflicting mise configuration is not overwritten.
@@ -41,6 +50,7 @@ pull request for review:
 
 | File | Purpose |
 | --- | --- |
+| `.machine-setup.yml` | Default host configuration (copied into home; host edits are preserved) |
 | `config/tools.toml` | Enable mise tools and choose versions |
 | `config/packages.ubuntu.txt` | Ubuntu/WSL apt packages |
 | `config/packages.macos.txt` | macOS Homebrew formulae |
@@ -53,14 +63,16 @@ personal/work account login are configured separately.
 
 ```bash
 bash bootstrap.sh --dry-run  # Preview your local checkout
-bash bootstrap.sh           # Apply your local checkout
+bash bootstrap.sh           # Ask about sudo on first run, then apply
 bash tests/check.sh         # Run checks without installing packages
 ```
 
 To preview on a new machine, add `-- --dry-run` to the install command.
-For a release, replace `main` in the download URL with its tag and add
-`-- --ref TAG` to the command. Use `latest` in mise configuration to follow its
-latest channel, or retain ranges/pins to limit updates.
+Use `--repo HTTPS_URL` to select a remote repository and `MACHINE_SETUP_DIR`
+to override the remote checkout destination. For a release, replace `main` in
+the download URL with its tag and add `-- --ref TAG` to the command.
+Use `latest` in mise configuration to follow its latest channel, or retain
+ranges/pins to limit updates.
 
 CI checks Ubuntu and macOS syntax, previews, safe reruns, update behavior, config
 preservation, and whitespace with fake installers. Full clean-machine

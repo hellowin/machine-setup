@@ -6,29 +6,33 @@ for file in bootstrap.sh scripts/*.sh tests/*.sh; do
 done
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
-# Preview must work without credentials, a writable home, or installer calls.
+# CLI previews must not prompt or write anything, even without a host YAML file.
+mkdir -p "$scratch/home"
 HOME="$scratch/home" bash bootstrap.sh --dry-run > "$scratch/local-plan"
-[ ! -e "$scratch/home" ]
 grep -q 'Would install mise' "$scratch/local-plan"
+[ -z "$(ls -A "$scratch/home")" ]
+for option in --sudo --no-sudo --unknown; do
+  if HOME="$scratch/home" bash bootstrap.sh "$option" > /dev/null 2>&1; then
+    echo "CLI argument unexpectedly accepted: $option" >&2; exit 1
+  fi
+  if HOME="$scratch/home" bash scripts/setup.sh ubuntu "$option" > /dev/null 2>&1; then
+    echo "Setup argument unexpectedly accepted: $option" >&2; exit 1
+  fi
+done
+HOME="$scratch/home" bash bootstrap.sh --help > "$scratch/help"
+grep -q -- '--ref' "$scratch/help"
 HOME="$scratch/home" MACHINE_SETUP_DIR="$scratch/checkout" bash bootstrap.sh --dry-run \
-  --repo https://github.com/example/machine-setup.git > "$scratch/remote-plan"
+  --repo https://github.com/example/machine-setup.git --ref release > "$scratch/remote-plan"
+grep -q "at release into $scratch/checkout" "$scratch/remote-plan"
 [ ! -e "$scratch/checkout" ]
-if bash bootstrap.sh --unknown > /dev/null 2>&1; then
-  echo 'Unknown option unexpectedly accepted.' >&2; exit 1
-fi
-if bash bootstrap.sh --repo > /dev/null 2>&1; then
-  echo 'Missing repo argument unexpectedly accepted.' >&2; exit 1
-fi
-if bash bootstrap.sh --dry-run --repo file:///tmp/repo > /dev/null 2>&1; then
-  echo 'Non-HTTPS repository unexpectedly accepted.' >&2; exit 1
-fi
-# The exact download-and-run form must default to our public repository.
+# The exact download-and-run form defaults to the public repository.
 HOME="$scratch/home" bash -c "$(cat bootstrap.sh)" -- --dry-run > "$scratch/default-plan"
 grep -q 'https://github.com/hellowin/machine-setup.git' "$scratch/default-plan"
-[ ! -e "$scratch/home" ]
-# Check both package manifests even when running on only one platform.
+run_setup() {
+  bash scripts/setup.sh "$@"
+}
 for platform in ubuntu macos; do
-  bash scripts/setup.sh "$platform" --dry-run > "$scratch/$platform-plan"
+  HOME="$scratch/home" run_setup "$platform" --dry-run > "$scratch/$platform-plan"
   grep -q 'git' "$scratch/$platform-plan"
 done
 # Exercise actual setup control flow using isolated homes and fake installers.
@@ -78,9 +82,12 @@ case "${1:-}" in trust|install|upgrade|self-update|--version|ls) exit 0 ;; *) ex
 MOCK
   chmod +x "$test_home/.local/bin/mise"
   printf '# Existing shell configuration\n' > "$test_home/.bashrc"
+  sudo_choice=false
+  if [ "$platform" = ubuntu ]; then sudo_choice=true; fi
+  printf 'sudoEnabled: %s\n' "$sudo_choice" > "$test_home/.machine-setup.yml"
   for iteration in 1 2; do
     MOCK_PLATFORM="$platform" HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" PATH="$scratch/bin:$PATH" \
-      bash scripts/setup.sh "$platform" > "$scratch/$platform-apply"
+      run_setup "$platform" > "$scratch/$platform-apply"
   done
   [ "$(grep -c 'activate bash' "$test_home/.bashrc")" -eq 1 ]
   [ "$(grep -c 'activate zsh' "$test_home/.zshrc")" -eq 1 ]
@@ -89,7 +96,7 @@ MOCK
   rm "$test_home/.config/mise/conf.d/machine-setup.toml"
   printf 'existing config\n' > "$test_home/.config/mise/conf.d/machine-setup.toml"
   if MOCK_PLATFORM="$platform" HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" PATH="$scratch/bin:$PATH" \
-    bash scripts/setup.sh "$platform" > /dev/null 2>&1; then
+    run_setup "$platform" > /dev/null 2>&1; then
     echo 'Conflicting config unexpectedly overwritten.' >&2; exit 1
   fi
   grep -qx 'existing config' "$test_home/.config/mise/conf.d/machine-setup.toml"

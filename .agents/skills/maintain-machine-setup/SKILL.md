@@ -14,21 +14,28 @@ permission to install software on the operator's machine or publish changes.
 - Keep the public README install command working on fresh Ubuntu 24.04+,
   WSL Ubuntu, and macOS with IT-provisioned Command Line Tools. Use Bash
   3.2-compatible shell features for macOS.
-- **macOS is office-managed and has no sudo.** Never invoke sudo or launch
-  Command Line Tools or Homebrew installation. Corporate IT provisions them,
-  including Homebrew through the managed software center. Discover existing
-  Homebrew on PATH or at its standard Apple Silicon/Intel prefixes. If missing,
-  warn the user to install Homebrew manually through IT and stop before package
-  updates or configuration writes. With properly provisioned Homebrew, use
-  unprivileged `brew update` and guarded formula installs/upgrades from
-  `config/packages.macos.txt`; do not repair permissions or escalate privileges.
-  Install and self-update mise at `~/.local/bin/mise` even when a system mise is
-  on PATH; explicitly set the installer destination and reject a linked or
-  non-writable local mise binary. Keep tools and activation in user-writable
-  locations. New formulae/tools/backends must be checked for indirect privilege
-  requirements before adding them to the macOS setup.
-- **Ubuntu/WSL is personally managed with sudo available.** Keep sudo for apt
-  metadata refreshes and guarded package installs/upgrades.
+- **Privilege access is a user choice, independent of OS.** Ask whether sudo is
+  available only when `~/.machine-setup.yml` does not exist, persist
+  `sudoEnabled`, and reuse it on reruns. Existing host files must specify
+  `sudoEnabled: true` or `false`; never prompt to repair them. Only sudo is
+  configured through YAML; reject `--sudo` and `--no-sudo`.
+  Preserve `--dry-run`, `--repo`, `--ref`, help, the setup platform argument,
+  and the `MACHINE_SETUP_DIR` environment override. Keep the repository's
+  `.machine-setup.yml` as the default template; do not overwrite unrelated host configuration.
+- Ubuntu/WSL uses sudo for apt metadata refreshes and guarded package updates
+  only when enabled. Without sudo, show manual package instructions and continue
+  user-local setup if required tools are present. Never try unprivileged apt
+  writes. Missing bootstrap prerequisites must give actionable instructions.
+- macOS requires existing Command Line Tools and Homebrew. Discover Homebrew on
+  PATH or at its standard Apple Silicon/Intel prefixes. If missing, direct the
+  user to manual installation or IT and stop before package updates or config
+  writes. Never launch these installers automatically. Homebrew formula updates
+  use normal user permissions regardless of the sudo choice.
+- macOS and all no-sudo setups install/self-update mise at `~/.local/bin/mise`,
+  ignoring system mise. Set the installer destination explicitly and reject a
+  linked or non-writable local binary. Keep tools and activation user-writable.
+  Check new formulae/tools/backends for indirect privilege requirements before
+  adding them to no-sudo setup.
 - Reruns converge to available updates for declared apt/Homebrew packages. Do not
   downgrade a newer OS package, reinstall an equal version, ignore package-manager
   pins, remove existing OS packages, or run a blanket OS upgrade.

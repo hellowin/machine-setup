@@ -23,6 +23,10 @@ class MockTests(unittest.TestCase):
                         HOME=str(self.base / "home"), MOCK_LOG=str(self.log))
         self.env.pop("ZDOTDIR", None)
         self.omz_mocks()
+        # Full setup fixtures already use Zsh; prevent any host account mutation.
+        self.mock("getent", "import sys\nprint(sys.argv[-1]+':x:1000:1000::/home/test:/bin/zsh')\n")
+        self.mock("dscl", "print('UserShell: /bin/zsh')\n")
+        self.mock("chsh", "import sys\nprint('Unexpected host shell change', file=sys.stderr)\nsys.exit(97)\n")
 
     def omz_mocks(self):
         self.mock("zsh", "pass\n")

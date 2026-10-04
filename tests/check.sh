@@ -35,6 +35,7 @@ for platform in ubuntu macos; do
   HOME="$scratch/home" run_setup "$platform" --dry-run > "$scratch/$platform-plan"
   grep -q 'git' "$scratch/$platform-plan"
   grep -q 'Would install or fast-forward update Oh My Zsh' "$scratch/$platform-plan"
+  grep -q 'Would set Zsh as the account login shell' "$scratch/$platform-plan"
 done
 # Exercise actual setup control flow using isolated homes and fake installers.
 mkdir -p "$scratch/bin"
@@ -95,6 +96,19 @@ cat > "$scratch/bin/zsh" <<'MOCK'
 #!/usr/bin/env bash
 exit 0
 MOCK
+cat > "$scratch/bin/getent" <<'MOCK'
+#!/usr/bin/env bash
+printf '%s:x:1000:1000::/home/test:/bin/zsh\n' "$2"
+MOCK
+cat > "$scratch/bin/dscl" <<'MOCK'
+#!/usr/bin/env bash
+printf 'UserShell: /bin/zsh\n'
+MOCK
+cat > "$scratch/bin/chsh" <<'MOCK'
+#!/usr/bin/env bash
+echo 'Unexpected host shell change.' >&2
+exit 1
+MOCK
 chmod +x "$scratch/bin/"*
 for platform in ubuntu macos; do
   test_home=$scratch/home-$platform
@@ -130,3 +144,4 @@ printf 'Syntax, previews, repeated setup, and configuration preservation checks 
 
 python3 tests/test_updates.py
 python3 -B tests/test_oh_my_zsh.py
+python3 -B tests/test_default_shell.py

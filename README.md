@@ -48,8 +48,18 @@ Oh My Zsh is cloned into `~/.oh-my-zsh` and updated on reruns using fast-forward
 Git updates. Dirty checkouts, local commits, and conflicting managed settings
 stop setup without discarding changes. If `.zshrc` already loads Oh My Zsh independently,
 setup preserves that configuration and installation; continue using its own
-updater. Setup does not change your login shell: run `zsh` to try it, or select
-Zsh in your terminal settings. Zsh configuration honors an exported `ZDOTDIR`.
+updater. After installation and verification, setup makes Zsh your default login
+shell with `chsh`, unless your account already uses Zsh. It selects an executable
+Zsh listed in `/etc/shells` and never edits that file. Ubuntu/WSL uses sudo for
+this change when enabled; without sudo, and on macOS, `chsh` runs as your user
+and may ask for your account password. If the change is denied, setup stops
+with instructions to retry or ask an administrator.
+
+Close the terminal and open a new session after setup. In WSL, reopen Ubuntu.
+If your terminal profile explicitly launches Bash, remove that override so it
+uses the account login shell. To change an existing installation immediately,
+run `chsh -s "$(command -v zsh)"`, then reopen Ubuntu. Zsh configuration honors
+an exported `ZDOTDIR`.
 
 For a setup-managed installation, set `ZSH_THEME="your-theme"` and/or
 `plugins=(git z ...)` before the `# machine-setup: Oh My Zsh` line in `.zshrc`.

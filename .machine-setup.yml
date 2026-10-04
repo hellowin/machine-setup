@@ -2,3 +2,12 @@
 # Setup asks about sudo only when the host file does not exist.
 # In an existing host file, sudoEnabled must be true or false.
 sudoEnabled: null
+# workspaces:
+#   - name: personal
+#     location: ~/workspace/personal
+#     email: my@email.com
+#     githubUser: hellowin
+#   - name: work
+#     location: ~/workspace/work
+#     email: my@work.com
+#     githubUser: hellowinatwork

@@ -14,6 +14,7 @@ setup_main() {
     printf '\nWould install mise, link config/tools.toml into ~/.config/mise/conf.d,\nupgrade configured tools using mise, and add mise activation to .bashrc and .zshrc.\n'
     printf '\nWould install or fast-forward update Oh My Zsh in ~/.oh-my-zsh.\nExisting Oh My Zsh configuration and its updater would be preserved.\n'
     printf '\nWould set Zsh as the account login shell using chsh after setup succeeds, unless it is already Zsh.\nWould use an executable Zsh registered in /etc/shells; chsh may require account authentication.\n'
+    printf '\nWould create configured workspaces, guide GitHub browser login and SSH key generation,\nregister public authentication/signing keys, and configure Git identities and signing.\n'
     return 0
   fi
 
@@ -120,6 +121,9 @@ setup_main() {
   # Do not compare versions ourselves, bump requests, or force reinstalls.
   "$mise_bin" install
   "$mise_bin" upgrade
+
+  # Parse YAML through mise-managed tools; an absent/empty workspace list is a no-op.
+  "$mise_bin" exec -- python "$setup_dir/scripts/workspaces.py" "$setup_config"
 
   setup_oh_my_zsh
 

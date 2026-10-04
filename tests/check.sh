@@ -115,7 +115,7 @@ for platform in ubuntu macos; do
   mkdir -p "$test_home/.local/bin"
   cat > "$test_home/.local/bin/mise" <<'MOCK'
 #!/usr/bin/env bash
-case "${1:-}" in trust|install|upgrade|self-update|--version|ls) exit 0 ;; *) exit 1 ;; esac
+case "${1:-}" in trust|install|upgrade|self-update|exec|--version|ls) exit 0 ;; *) exit 1 ;; esac
 MOCK
   chmod +x "$test_home/.local/bin/mise"
   printf '# Existing shell configuration\n' > "$test_home/.bashrc"
@@ -145,3 +145,4 @@ printf 'Syntax, previews, repeated setup, and configuration preservation checks 
 python3 tests/test_updates.py
 python3 -B tests/test_oh_my_zsh.py
 python3 -B tests/test_default_shell.py
+python3 -B tests/test_workspaces.py

@@ -15,7 +15,7 @@ access to sudo only when `~/.machine-setup.yml` does not exist, and saves your
 answer there. Reruns read the YAML file without prompting. Change
 `sudoEnabled` to `true` or `false` in that file to change the choice. An existing
 file with a missing, null, or invalid sudo setting must be corrected before setup.
-Only the sudo choice is configured through YAML.
+YAML configures the sudo choice and optional Git workspaces.
 
 Ubuntu/WSL uses sudo for apt operations only when enabled. Without sudo, setup
 prints package commands for you or an administrator to run and continues with
@@ -33,6 +33,8 @@ an administrator before running the download command.
 - mise installation and activation in Bash and Zsh.
 - Zsh and [Oh My Zsh](https://ohmyz.sh/).
 - Some tools configured in `config/tools.toml`.
+- GitHub CLI and YAML tooling through mise; optional workspace identities, SSH access,
+  and signed commits.
 
 The checkout lives in `~/.local/share/machine-setup`. Rerun the install command to
 update and reapply setup; existing checkout changes must be committed or stashed.
@@ -81,8 +83,79 @@ pull request for review:
 | `config/packages.macos.txt` | macOS Homebrew formulae |
 | `scripts/setup.sh` | Additional setup steps |
 
-Keep tokens and private keys outside this public repository. Credentials and
-personal/work account login are configured separately.
+Keep tokens, private keys, and personal/work identities outside this public
+repository. Configure workspaces in the host file as described below.
+
+## Git workspaces
+
+Add workspaces to `~/.machine-setup.yml`, then run the same installation command:
+
+```yaml
+sudoEnabled: false
+workspaces:
+  - name: default
+    email: me@example.com
+    githubUser: my-github-account
+  - name: work
+    location: ~/workspace/work
+    email: me@company.com
+    githubUser: my-work-account
+    # Optional: reuse a particular local private key.
+    # privateKey: ~/.ssh/id_ed25519_work
+    # Optional: otherwise use your GitHub display name or username.
+    # gitName: My Name
+```
+
+Setup creates declared workspace directories and uses Git conditional includes
+to select the email, SSH identity, and commit signing for repositories underneath
+each location. One entry without a location supplies the global fallback. Nested
+workspaces take precedence over their parents. Names must be unique; declared
+locations must be unique and absolute or start with `~/`.
+
+Run interactively. Setup selects the declared GitHub account or guides browser
+login, checks the account matches, and requests any missing key-upload/email
+permissions through browser authorization. The email must be verified on that
+account (its GitHub noreply address is also supported). If needed, verify it at
+[GitHub email settings](https://github.com/settings/emails) and rerun.
+
+Without `privateKey`, setup reuses its previously selected key or an unambiguous
+local key registered to that GitHub account. Otherwise it generates an Ed25519
+key at `~/.ssh/machine-setup-USERNAME`, asking you to choose a passphrase. An
+explicit missing `privateKey` is generated at the given path. Existing keys are
+never replaced. Setup derives/checks the public key and registers it with GitHub
+for both authentication and signing, skipping existing registrations. Private
+keys remain local. See GitHub's
+[key generation guide](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent).
+
+Setup verifies SSH authentication as the expected account and exercises signing
+before reporting success. Passphrase-protected keys may prompt during setup and
+later Git operations; you can load them into your existing SSH agent with
+`ssh-add ~/.ssh/machine-setup-USERNAME`. Confirm GitHub's host key when SSH asks;
+see its [published fingerprints](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints).
+
+Inside configured repositories, GitHub HTTPS remotes are routed through SSH with
+the selected workspace key, allowing fetch/pull/push without depending on the
+currently active `gh` account. This configures access to repositories the account
+is authorized to use; it does not clone repositories or grant permissions.
+Organization SSO may require separately
+[authorizing the SSH key](https://docs.github.com/en/enterprise-cloud@latest/authentication/authenticating-with-single-sign-on/authorizing-an-ssh-key-for-use-with-single-sign-on).
+For initial clones with multiple accounts, use `gh repo clone` with the intended
+account active, or `git -c core.sshCommand='ssh -i KEY -o IdentitiesOnly=yes' clone git@github.com:OWNER/REPO.git`.
+
+New commits inherit SSH signing automatically. Existing repository overrides
+are preserved; setup reports conflicting identity, signing, or SSH settings in
+existing workspace repositories and asks you to resolve them. Explicit Git
+command options and environment variables can still override configuration.
+Linked worktrees inherit the identity selected by their common Git directory.
+
+Reruns update declared entries and add new ones without duplicate includes.
+Removing an entry leaves its directory, key, GitHub registrations, configuration
+file, and include in place for you to manage. New declared entries take precedence
+over retained entries at the same location. Generated Git files live under
+`~/.config/machine-setup/git` (or `$XDG_CONFIG_HOME/machine-setup/git`); setup stops
+if an actively managed file was edited manually. An absent or empty workspace
+list makes no Git or account changes. The host YAML is preserved on every rerun;
+changes to the repository template do not update an existing host file.
 
 ## Preview and develop
 

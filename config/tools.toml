@@ -4,3 +4,5 @@
 [tools]
 node = "26"
 python = "3.14"
+gh = "latest"
+yq = "latest"

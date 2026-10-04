@@ -211,7 +211,7 @@ set -eu
 mkdir -p "$HOME/.local/bin"
 cat > "$MISE_INSTALL_PATH" <<'MOCK'
 #!/bin/sh
-case "$1" in self-update|trust|install|upgrade|--version|ls) exit 0 ;; *) exit 1 ;; esac
+case "$1" in self-update|trust|install|upgrade|exec|--version|ls) exit 0 ;; *) exit 1 ;; esac
 MOCK
 chmod +x "$MISE_INSTALL_PATH"
 """)
@@ -265,7 +265,7 @@ class PrivilegeTests(MockTests):
             self.mock(name, "import sys\nprint('Unexpected system command', file=sys.stderr)\nsys.exit(97)\n")
         # curl and git are available, but no downloads should be needed here.
         mise = home / ".local/bin/mise"
-        mise.write_text("#!/bin/sh\ncase \"$1\" in self-update|trust|install|upgrade|--version|ls) exit 0 ;; *) exit 98 ;; esac\n")
+        mise.write_text("#!/bin/sh\ncase \"$1\" in self-update|trust|install|upgrade|exec|--version|ls) exit 0 ;; *) exit 98 ;; esac\n")
         mise.chmod(0o755)
         return home
 
@@ -346,7 +346,7 @@ set -eu
 mkdir -p "$HOME/.local/bin"
 cat > "$MISE_INSTALL_PATH" <<'MOCK'
 #!/bin/sh
-case "$1" in self-update|trust|install|upgrade|--version|ls) exit 0 ;; *) exit 1 ;; esac
+case "$1" in self-update|trust|install|upgrade|exec|--version|ls) exit 0 ;; *) exit 1 ;; esac
 MOCK
 chmod +x "$MISE_INSTALL_PATH"
 """)

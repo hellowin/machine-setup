@@ -4,3 +4,7 @@
 [tools]
 node = "26"
 python = "3.14"
+
+# User-local workspace configuration and GitHub authentication.
+gh = "latest"
+yq = "latest"

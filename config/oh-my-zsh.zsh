@@ -1,7 +1,7 @@
 # Defaults can be overridden before this file is sourced in .zshrc.
 export ZSH="$HOME/.oh-my-zsh"
 if (( ! ${+ZSH_THEME} )); then
-  ZSH_THEME=robbyrussell
+  ZSH_THEME=agnoster
 fi
 if (( ! ${+plugins} )); then
   plugins=(git z)

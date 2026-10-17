@@ -24,22 +24,50 @@ preflight_oh_my_zsh() {
       return 0
     fi
   fi
-  if [ -L "$omz_dir" ] || { [ -e "$omz_dir" ] && [ ! -d "$omz_dir/.git" ]; }; then
-    printf 'Move conflicting %s aside; setup requires an Oh My Zsh Git checkout.\n' "$omz_dir" >&2
+  autosuggestions_dir=$omz_dir/custom/plugins/zsh-autosuggestions
+  preflight_zsh_checkout "$omz_dir" ohmyzsh/ohmyzsh || return 1
+  preflight_zsh_checkout "$autosuggestions_dir" zsh-users/zsh-autosuggestions
+}
+
+# Both managed repositories must be safe before setup changes either one.
+preflight_zsh_checkout() {
+  local target=$1 repository=$2 remote branch status
+  if [ -L "$target" ] || { [ -e "$target" ] && [ ! -d "$target/.git" ]; }; then
+    printf 'Move conflicting %s aside; setup requires a Git checkout.\n' "$target" >&2
     return 1
   fi
-  if [ -d "$omz_dir" ]; then
-    omz_remote=$(git -C "$omz_dir" remote get-url origin) || return 1
-    case "$omz_remote" in
-      https://github.com/ohmyzsh/ohmyzsh.git|https://github.com/ohmyzsh/ohmyzsh|git@github.com:ohmyzsh/ohmyzsh.git) ;;
-      *) printf 'Unexpected Oh My Zsh origin in %s; it will not be updated.\n' "$omz_dir" >&2; return 1 ;;
+  if [ -d "$target" ]; then
+    remote=$(git -C "$target" remote get-url origin) || return 1
+    case "$remote" in
+      "https://github.com/$repository.git"|"https://github.com/$repository"|"git@github.com:$repository.git") ;;
+      *) printf 'Unexpected origin in %s; it will not be updated.\n' "$target" >&2; return 1 ;;
     esac
-    omz_branch=$(git -C "$omz_dir" symbolic-ref --short HEAD) || return 1
-    omz_status=$(git -C "$omz_dir" status --porcelain) || return 1
-    if [ "$omz_branch" != master ] || [ -n "$omz_status" ]; then
-      printf 'Oh My Zsh must be clean and on master before setup: %s\n' "$omz_dir" >&2
+    branch=$(git -C "$target" symbolic-ref --short HEAD) || return 1
+    status=$(git -C "$target" status --porcelain) || return 1
+    if [ "$branch" != master ] || [ -n "$status" ]; then
+      printf 'Checkout must be clean and on master before setup: %s\n' "$target" >&2
       return 1
     fi
+  fi
+}
+
+update_zsh_checkout() {
+  local target=$1 repository=$2 entrypoint=$3
+  if [ -d "$target" ]; then
+    git -C "$target" fetch origin master || return 1
+    # Refuse local commits, including commits ahead of upstream.
+    if ! git -C "$target" merge-base --is-ancestor HEAD FETCH_HEAD; then
+      printf 'Checkout has local commits; resolve them before updating %s.\n' "$target" >&2
+      return 1
+    fi
+    git -C "$target" merge --ff-only FETCH_HEAD || return 1
+  else
+    mkdir -p "$(dirname "$target")" || return 1
+    git clone --depth=1 --branch master "https://github.com/$repository.git" "$target" || return 1
+  fi
+  if [ ! -f "$target/$entrypoint" ]; then
+    printf 'Missing Zsh entry point: %s/%s\n' "$target" "$entrypoint" >&2
+    return 1
   fi
 }
 
@@ -52,21 +80,8 @@ setup_oh_my_zsh() {
     printf 'Missing required tool: zsh. Install it manually or ask an administrator, then rerun.\n' >&2
     return 1
   }
-  if [ -d "$omz_dir" ]; then
-    git -C "$omz_dir" fetch origin master
-    # Refuse local commits, including commits ahead of upstream.
-    if ! git -C "$omz_dir" merge-base --is-ancestor HEAD FETCH_HEAD; then
-      printf 'Oh My Zsh has local commits; resolve them before updating %s.\n' "$omz_dir" >&2
-      return 1
-    fi
-    git -C "$omz_dir" merge --ff-only FETCH_HEAD
-  else
-    git clone --depth=1 --branch master https://github.com/ohmyzsh/ohmyzsh.git "$omz_dir"
-  fi
-  if [ ! -f "$omz_dir/oh-my-zsh.sh" ]; then
-    printf 'Missing Oh My Zsh entry point in %s.\n' "$omz_dir" >&2
-    return 1
-  fi
+  update_zsh_checkout "$omz_dir" ohmyzsh/ohmyzsh oh-my-zsh.sh || return 1
+  update_zsh_checkout "$autosuggestions_dir" zsh-users/zsh-autosuggestions zsh-autosuggestions.zsh || return 1
   if [ "$omz_mode" = new ]; then
     mkdir -p "$(dirname "$zsh_rc")"
     printf '\n# machine-setup: Oh My Zsh\n%s\n' "$omz_source" >> "$zsh_rc"

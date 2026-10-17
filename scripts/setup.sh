@@ -12,7 +12,7 @@ setup_main() {
     cat "$setup_dir/config/packages.$platform.txt"
     printf '\nWould read ~/.machine-setup.yml, ask about sudo only if the file is absent, and save the initial choice.\n'
     printf '\nWould install mise, link config/tools.toml into ~/.config/mise/conf.d,\nupgrade configured tools using mise, and add mise activation to .bashrc and .zshrc.\n'
-    printf '\nWould install or fast-forward update Oh My Zsh in ~/.oh-my-zsh.\nExisting Oh My Zsh configuration and its updater would be preserved.\n'
+    printf '\nWould install or fast-forward update Oh My Zsh in ~/.oh-my-zsh.\nWould install or fast-forward update zsh-autosuggestions and enable it for managed shells.\nExisting Oh My Zsh configuration and its updater would be preserved.\n'
     printf '\nWould set Zsh as the account login shell using chsh after setup succeeds, unless it is already Zsh.\nWould use an executable Zsh registered in /etc/shells; chsh may require account authentication.\n'
     printf '\nWould create configured workspaces, guide GitHub browser login and SSH key generation,\nregister public authentication/signing keys, and configure Git identities and signing.\n'
     printf '\nWould configure Vim for Git commit messages and interactive rebases.\n'

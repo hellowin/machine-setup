@@ -35,6 +35,7 @@ for platform in ubuntu macos; do
   HOME="$scratch/home" run_setup "$platform" --dry-run > "$scratch/$platform-plan"
   grep -q 'git' "$scratch/$platform-plan"
   grep -q 'Would install or fast-forward update Oh My Zsh' "$scratch/$platform-plan"
+  grep -q 'Would install or fast-forward update zsh-autosuggestions' "$scratch/$platform-plan"
   grep -q 'Would set Zsh as the account login shell' "$scratch/$platform-plan"
 done
 # Exercise actual setup control flow using isolated homes and fake installers.
@@ -80,14 +81,18 @@ case "${1:-}" in
   clone)
     for arg in "$@"; do destination=$arg; done
     mkdir -p "$destination/.git"
-    touch "$destination/oh-my-zsh.sh"
+    touch "$destination/oh-my-zsh.sh" "$destination/zsh-autosuggestions.zsh"
     ;;
   config)
     case "${3:-}" in --get-all) exit 1 ;; --add) exit 0 ;; *) exit 1 ;; esac
     ;;
   -C)
     case "${3:-}" in
-      remote) echo 'https://github.com/ohmyzsh/ohmyzsh.git' ;;
+      remote)
+        case "$2" in
+          */zsh-autosuggestions) echo 'https://github.com/zsh-users/zsh-autosuggestions.git' ;;
+          *) echo 'https://github.com/ohmyzsh/ohmyzsh.git' ;;
+        esac ;;
       symbolic-ref) echo master ;;
       status|fetch|merge-base|merge) exit 0 ;;
       *) exit 1 ;;
@@ -137,6 +142,7 @@ MOCK
   [ "$(grep -c 'activate zsh' "$test_home/.zshrc")" -eq 1 ]
   [ "$(grep -c 'machine-setup: Oh My Zsh' "$test_home/.zshrc")" -eq 1 ]
   [ -f "$test_home/.oh-my-zsh/oh-my-zsh.sh" ]
+  [ -f "$test_home/.oh-my-zsh/custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]
   grep -q '# Existing shell configuration' "$test_home/.bashrc"
   [ -L "$test_home/.config/mise/conf.d/machine-setup.toml" ]
   rm "$test_home/.config/mise/conf.d/machine-setup.toml"

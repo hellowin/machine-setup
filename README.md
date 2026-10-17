@@ -32,7 +32,7 @@ an administrator before running the download command.
 - Git, curl, and Ubuntu build prerequisites.
 - Vim for Git commit messages and interactive rebases.
 - mise installation and activation in Bash and Zsh.
-- Zsh and [Oh My Zsh](https://ohmyz.sh/).
+- Zsh, [Oh My Zsh](https://ohmyz.sh/), and zsh-autosuggestions.
 - Some tools configured in `config/tools.toml`.
 - GitHub CLI and YAML tooling through mise; optional workspace identities, SSH access,
   and signed commits.
@@ -48,7 +48,9 @@ and how old versions are pruned; there is no custom mise version override.
 Existing shell settings are preserved, and conflicting mise configuration is not overwritten.
 
 Oh My Zsh is cloned into `~/.oh-my-zsh` and updated on reruns using fast-forward
-Git updates. Dirty checkouts, local commits, and conflicting managed settings
+Git updates. Setup also installs zsh-autosuggestions into
+`~/.oh-my-zsh/custom/plugins/zsh-autosuggestions` and updates it on reruns
+using the same safeguards. Dirty checkouts, local commits, and conflicting managed settings
 stop setup without discarding changes. If `.zshrc` already loads Oh My Zsh independently,
 setup preserves that configuration and installation; continue using its own
 updater. After installation and verification, setup makes Zsh your default login
@@ -67,8 +69,10 @@ an exported `ZDOTDIR`.
 For a setup-managed installation, set `ZSH_THEME="your-theme"` and/or
 `plugins=(git z ...)` before the `# machine-setup: Oh My Zsh` line in `.zshrc`.
 Try `gst` for Git status, `gd` for diff, and `z machine-setup` to jump back to
-this directory after visiting it. Autosuggestions, syntax highlighting, and
-fzf are optional additions and are not installed by this setup.
+this directory after visiting it. Autosuggestions loads automatically after Oh My Zsh,
+even with a personal `plugins=(...)` list; press the right arrow to accept a
+suggestion. Syntax highlighting and fzf are optional and are not installed by
+this setup.
 
 ## Customize
 

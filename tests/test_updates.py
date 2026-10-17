@@ -38,11 +38,14 @@ if args[0]=='clone':
     target=Path(args[-1])
     (target/'.git').mkdir(parents=True)
     (target/'oh-my-zsh.sh').touch()
+    (target/'zsh-autosuggestions.zsh').touch()
 elif args[0]=='config':
     if '--get-all' in args: sys.exit(1)
     elif '--add' not in args: sys.exit(97)
 elif args[0]=='-C':
-    if args[2]=='remote': print('https://github.com/ohmyzsh/ohmyzsh.git')
+    if args[2]=='remote':
+        repo = 'zsh-users/zsh-autosuggestions' if args[1].endswith('/zsh-autosuggestions') else 'ohmyzsh/ohmyzsh'
+        print('https://github.com/'+repo+'.git')
     elif args[2]=='symbolic-ref': print('master')
     elif args[2] not in ('status','fetch','merge-base','merge'): sys.exit(97)
 else: sys.exit(97)
